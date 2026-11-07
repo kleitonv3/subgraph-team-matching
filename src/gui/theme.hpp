@@ -25,6 +25,11 @@ const Color kEdge = {190, 196, 206, 255};
 const Color kVertexOutline = {255, 255, 255, 255};
 const Color kTooltip = {30, 34, 45, 235};
 
+// Resultado de cada passo da busca
+const Color kOk = {47, 158, 68, 255};     // colaboração exigida que existe / equipe válida
+const Color kFail = {224, 49, 49, 255};   // colaboração que falta / papel errado
+const Color kWarning = {230, 119, 0, 255};
+
 // Cor de cada papel (vértices do grafo e legenda).
 Color roleColor(Role role);
 // Abreviação do papel, desenhada dentro dos vértices grandes (ex.: "L", "Dev", "QA").
