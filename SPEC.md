@@ -196,7 +196,7 @@ sorteados e `seed`.
 - Passar o mouse sobre um funcionário mostra nome, papel e número de colaborações.
 - A velocidade vai de 1 a 10.000 passos/s, em escala logarítmica.
 - A aba **Benchmark** lê `results/bench.csv` e plota as duas séries (tempo × n e tempo × k) em escala
-  log, marcando a partir de que tamanho a busca passa do tempo limite.
+  log, marcando a partir de que tamanho a busca passa do tempo limite (detalhes na Fase 6).
 
 ---
 
@@ -294,7 +294,7 @@ O Kleiton revisa o diff e faz o merge, e só então começa a fase seguinte. Os 
 - **Checkpoint:** a interface mostra a empresa e o preset selecionado, sem execução ainda.
 - **Para revisar:** visual geral (cores, legibilidade, disposição dos painéis).
 
-### Fase 5 — Execução e reprodução passo a passo
+### ✅ Fase 5 — Execução e reprodução passo a passo
 - Botão Executar: roda o solver em modo visual e guarda o trace. A busca roda numa thread separada (a
   janela continua respondendo), com botão **Cancelar** e tempo limite de 60 s.
 - Controles de reprodução: início, passo anterior, reproduzir/pausar, próximo passo, fim, velocidade
@@ -322,10 +322,28 @@ O Kleiton revisa o diff e faz o merge, e só então começa a fase seguinte. Os 
     Com `k` fixo, a força bruta cresce como `n^k` (polinomial). A explosão exponencial típica de um
     problema NP-Completo aparece quando `k` cresce.
 - Tempo limite padrão de **10 s** por execução, configurável com `--timeout`. Os números do relatório
-  usam `--timeout 60`.
+  usam `--timeout 60` (`make bench BENCH_ARGS="--timeout 60"`). Com 10 s, o benchmark completo leva uns
+  5 minutos.
+- Tamanhos da série n: 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, ... até 4096 (crescimento de ~1,5x).
+  Série k: n = 20 e k = 2, 3, 4, ... Cada série para no primeiro tamanho em que alguma execução estoura
+  o tempo limite.
+- O modo plantada roda **3 repetições** (seeds 1, 2, 3; `--reps`), porque o tempo até achar depende de
+  onde a equipe foi embutida; os gráficos usam a mediana. O modo sem solução roda uma vez: o trabalho é
+  sempre percorrer todos os `n!/(n-k)!` candidatos.
+- Se o solver não testar nenhum candidato (o stub), o benchmark avisa e para, em vez de varrer todos os
+  tamanhos à toa.
 - Grava `results/bench.csv` com as colunas
-  `solver,series,preset,mode,n,k,m,found,candidates,time_ms,timeout`.
-- Aba Benchmark na interface, com os gráficos tempo × n e tempo × k.
+  `solver,series,preset,mode,n,k,m,seed,found,candidates,time_ms,timeout` (uma linha por execução).
+- **Aba Benchmark** na interface:
+  - filtro de modo (sem solução / plantada) numa linha acima dos gráficos;
+  - gráfico de linhas tempo × n (uma linha por preset, cor fixa por preset, eixo de tempo em log) e
+    tempo × k, com a linha do tempo limite e marcador vazado nas execuções que estouraram;
+  - legenda, tooltip ao passar o mouse e uma tabela-resumo "Até que tamanho a busca é viável?";
+  - a paleta de cores foi validada para daltonismo (as cores de menor contraste são compensadas pela
+    legenda, pelo tooltip e pela tabela);
+  - o CSV é relido ao entrar na aba e pelo botão Recarregar.
+- Observação que aparece nos resultados: no pior caso, moldes com o mesmo `k` levam o mesmo tempo, porque
+  a força bruta testa todos os candidatos, sejam quais forem as arestas.
 - **Checkpoint:** `make bench` gera o CSV e a aba plota os dados.
 - **Para revisar:** o gráfico responde claramente "até que tamanho é viável"?
 
