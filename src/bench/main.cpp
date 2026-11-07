@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "dataset.hpp"
+#include "format.hpp"
 #include "generator.hpp"
 #include "graph.hpp"
 #include "solver.hpp"
@@ -86,30 +87,6 @@ int visibleLength(const std::string& text) {
 std::string padRight(const std::string& text, int width) {
     const int missing = width - visibleLength(text);
     return missing > 0 ? text + std::string(missing, ' ') : text;
-}
-
-// 1234567 -> "1.234.567"
-std::string withThousands(std::uint64_t value) {
-    std::string digits = std::to_string(value);
-    std::string result;
-    const int length = static_cast<int>(digits.size());
-    for (int i = 0; i < length; ++i) {
-        if (i > 0 && (length - i) % 3 == 0) result += '.';
-        result += digits[i];
-    }
-    return result;
-}
-
-std::string formatSeconds(double seconds) {
-    char buffer[64];
-    if (seconds < 1.0) {
-        std::snprintf(buffer, sizeof buffer, "%.3f ms", seconds * 1000.0);
-    } else {
-        std::snprintf(buffer, sizeof buffer, "%.3f s", seconds);
-    }
-    std::string text = buffer;
-    std::replace(text.begin(), text.end(), '.', ',');
-    return text;
 }
 
 std::string personLabel(const Graph& company, int v) {
@@ -301,15 +278,15 @@ int commandRun(const Options& options) {
                       << (person >= 0 && person < company.vertexCount() ? personLabel(company, person) : "?") << "\n";
         }
     } else if (result.timedOut) {
-        std::cout << "Resultado: tempo limite estourado (" << formatSeconds(options.timeout) << ") sem encontrar equipe\n";
+        std::cout << "Resultado: tempo limite estourado (" << formatDuration(options.timeout) << ") sem encontrar equipe\n";
     } else {
         std::cout << "Resultado: sem solução\n";
     }
 
-    std::cout << "\nCandidatos testados: " << withThousands(result.steps) << "\n";
-    if (options.findAll) std::cout << "Equipes encontradas: " << withThousands(result.matches) << "\n";
+    std::cout << "\nCandidatos testados: " << formatThousands(result.steps) << "\n";
+    if (options.findAll) std::cout << "Equipes encontradas: " << formatThousands(result.matches) << "\n";
     if (result.found && result.timedOut) std::cout << "A busca foi interrompida pelo tempo limite.\n";
-    std::cout << "Tempo: " << formatSeconds(result.seconds) << "\n";
+    std::cout << "Tempo: " << formatDuration(result.seconds) << "\n";
 
     if (!result.invalidReason.empty()) {
         std::cout << "\nATENÇÃO: o solver devolveu uma equipe inválida: " << result.invalidReason << "\n";
