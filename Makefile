@@ -1,7 +1,7 @@
 # Subgraph Team Matching — build
 #
 # Compila a raylib vendorizada (third_party/) e a interface. Só precisa de um compilador C/C++ e do make.
-#   make          compila tudo
+#   make          compila tudo: a interface (bin/teams_gui) e a CLI (bin/teams_bench)
 #   make run      abre a interface
 #   make clean    apaga os artefatos de build
 #
@@ -50,9 +50,18 @@ RAYLIB_CFLAGS := -std=c99 -O2 -w -DPLATFORM_DESKTOP -DGRAPHICS_API_OPENGL_33 \
 CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -MMD -MP -Isrc -I$(RAYLIB_SRC) -I$(RAYGUI_DIR)
 CFLAGS   := -std=c99 -O2 -MMD -MP -I$(RAYLIB_SRC) -I$(RAYGUI_DIR)
 
+# Núcleo compartilhado pela interface e pelo benchmark (não depende da raylib)
+CORE_SRCS   := src/graph.cpp src/context.cpp src/generator.cpp src/solvers/registry.cpp
+# Um arquivo por solver (registrado em src/solvers/registry.cpp)
+SOLVER_SRCS := src/solvers/brute_force.cpp
+CORE_OBJS   := $(addprefix $(BUILD_DIR)/,$(CORE_SRCS:.cpp=.o) $(SOLVER_SRCS:.cpp=.o))
+
 GUI_CXX_SRCS := src/gui/main.cpp
 GUI_C_SRCS   := src/gui/raygui_impl.c
 GUI_OBJS     := $(addprefix $(BUILD_DIR)/,$(GUI_CXX_SRCS:.cpp=.o) $(GUI_C_SRCS:.c=.o))
+
+BENCH_SRCS := src/bench/main.cpp
+BENCH_OBJS := $(addprefix $(BUILD_DIR)/,$(BENCH_SRCS:.cpp=.o))
 
 # ---------------------------------------------------------------------------
 # Ajustes por plataforma
@@ -62,6 +71,7 @@ ifeq ($(PLATFORM),windows)
     # -static evita depender das DLLs do compilador ao rodar o .exe em outra máquina
     LDFLAGS  := -static
     LDLIBS   := -lopengl32 -lgdi32 -lwinmm
+    BENCH_LDFLAGS := -static
 endif
 ifeq ($(PLATFORM),linux)
     EXE      :=
@@ -74,14 +84,15 @@ ifeq ($(PLATFORM),macos)
     LDLIBS   := -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo
 endif
 
-GUI_BIN := $(BIN_DIR)/teams_gui$(EXE)
+GUI_BIN   := $(BIN_DIR)/teams_gui$(EXE)
+BENCH_BIN := $(BIN_DIR)/teams_bench$(EXE)
 
 # ---------------------------------------------------------------------------
 # Alvos
 # ---------------------------------------------------------------------------
 .PHONY: all run clean
 
-all: $(GUI_BIN)
+all: $(GUI_BIN) $(BENCH_BIN)
 
 run: $(GUI_BIN)
 	./$(GUI_BIN)
@@ -92,6 +103,11 @@ clean:
 $(GUI_BIN): $(GUI_OBJS) $(RAYLIB_LIB)
 	@mkdir -p $(@D)
 	$(CXX) $(LDFLAGS) -o $@ $(GUI_OBJS) $(RAYLIB_LIB) $(LDLIBS)
+
+# O benchmark não usa a raylib: só o núcleo
+$(BENCH_BIN): $(BENCH_OBJS) $(CORE_OBJS)
+	@mkdir -p $(@D)
+	$(CXX) $(BENCH_LDFLAGS) -o $@ $^
 
 $(RAYLIB_LIB): $(RAYLIB_OBJS)
 	$(AR) rcs $@ $^
@@ -118,4 +134,4 @@ $(BUILD_DIR)/%.o: %.c
 # A implementação da raygui é código de terceiros: sem avisos
 $(BUILD_DIR)/src/gui/raygui_impl.o: CFLAGS += -w
 
--include $(GUI_OBJS:.o=.d)
+-include $(GUI_OBJS:.o=.d) $(CORE_OBJS:.o=.d) $(BENCH_OBJS:.o=.d)
