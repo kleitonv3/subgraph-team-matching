@@ -38,6 +38,8 @@ enum class CompanyMode {
 
 // Nome usado na linha de comando e no CSV ("random", "planted", "nosolution").
 const char* companyModeId(CompanyMode mode);
+// Nome para mostrar ao usuário ("aleatória", "plantada", "sem solução").
+const char* companyModeLabel(CompanyMode mode);
 bool parseCompanyMode(const std::string& text, CompanyMode& mode);
 
 struct CompanyParams {

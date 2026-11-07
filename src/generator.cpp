@@ -77,6 +77,15 @@ const char* companyModeId(CompanyMode mode) {
     return "random";
 }
 
+const char* companyModeLabel(CompanyMode mode) {
+    switch (mode) {
+        case CompanyMode::Random: return "aleatória";
+        case CompanyMode::Planted: return "plantada";
+        case CompanyMode::NoSolution: return "sem solução";
+    }
+    return "aleatória";
+}
+
 bool parseCompanyMode(const std::string& text, CompanyMode& mode) {
     for (CompanyMode candidate : {CompanyMode::Random, CompanyMode::Planted, CompanyMode::NoSolution}) {
         if (text == companyModeId(candidate)) {
@@ -123,7 +132,7 @@ bool generateCompany(const CompanyParams& params, const Graph* pattern, Graph& c
 
     Random random(params.seed);
     Graph result;
-    result.name = std::string("Empresa gerada (n=") + std::to_string(n) + ", " + companyModeId(params.mode) +
+    result.name = std::string("Empresa gerada (n=") + std::to_string(n) + ", " + companyModeLabel(params.mode) +
                   ", seed=" + std::to_string(params.seed) + ")";
 
     // 1. Papéis sorteados.
