@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 
+#include "bench_view.hpp"
 #include "dataset.hpp"
 #include "graph.hpp"
 #include "graph_view.hpp"
@@ -33,6 +34,8 @@ public:
 
     void selectPreset(int index);
     void selectCompany(int index);
+    // 0 = Visualização, 1 = Benchmark (relê results/bench.csv).
+    void selectTab(int tab);
     // Roda o solver selecionado em outra thread, gravando o trace.
     void startRun();
     bool isRunning() const { return running_.load(std::memory_order_acquire); }
@@ -81,6 +84,11 @@ private:
     Fonts fonts_{};
     std::string dataDir_;
     std::string error_;
+
+    // Abas: 0 = Visualização, 1 = Benchmark
+    int activeTab_ = 0;
+    BenchView benchView_;
+    std::string resultsPath_;
 
     // Dados
     std::vector<Preset> presets_;
