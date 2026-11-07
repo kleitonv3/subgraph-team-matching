@@ -1,0 +1,24 @@
+# Objetos e binários
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+
+# Pastas de build e resultados gerados
+build/
+bin/
+obj/
+results/
+
+# Editores / SO
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
