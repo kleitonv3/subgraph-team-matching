@@ -36,6 +36,7 @@ controles) já vêm dentro do repositório, em `third_party/`, e são compiladas
 | `make` | compila tudo (a primeira vez demora mais, porque compila a raylib) |
 | `make run` | compila, se precisar, e abre a interface |
 | `make clean` | apaga os arquivos gerados pelo build |
+| `./bin/teams_bench --help` | linha de comando: lista os dados, roda um solver, gera instâncias |
 
 ### Windows
 
