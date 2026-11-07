@@ -1,0 +1,12 @@
+name Cadeia de Mentoria
+desc Líder mentora um dev, que mentora outro dev, que trabalha com um QA
+vertices 4
+# id  papel  nome  x     y
+0     Lider  -     0.10  0.50
+1     Dev    -     0.37  0.50
+2     Dev    -     0.63  0.50
+3     QA     -     0.90  0.50
+edges 3
+0 1
+1 2
+2 3

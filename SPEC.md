@@ -54,8 +54,9 @@ Conjunto fixo, comparado por igualdade exata: `Lider`, `Dev`, `Designer`, `Arqui
 
 ## 3. Formato dos arquivos
 
-Arquivos texto simples, um por grafo, sem depender de nenhuma biblioteca de JSON. Linhas que começam
-com `#` são comentários.
+Arquivos texto simples, um por grafo, sem depender de nenhuma biblioteca de JSON. Tudo depois de `#`
+é comentário. Os nomes não podem ter espaço: `_` vira espaço (`Zé_Silva`) e `-` significa sem nome.
+Erros de formato são informados com arquivo, linha e motivo (ex.: `company.txt:12: papel desconhecido "Chefe"`).
 
 ```
 name Squad Ágil
@@ -72,19 +73,25 @@ edges 3
 0 3
 ```
 
-- `data/empresa.txt` é o grafo social fixo (~14 funcionários) usado na demonstração, com posições
-  desenhadas à mão para ficar legível.
-- `data/presets/*.txt` são os moldes de equipe.
+- `data/company.txt` é o grafo social fixo (14 funcionários em três grupos) usado na demonstração, com
+  posições desenhadas à mão para ficar legível. Os ids foram escolhidos para que as equipes válidas não
+  apareçam logo nos primeiros candidatos testados, o que deixa a animação mais interessante.
+- `data/presets/*.txt` são os moldes de equipe. O nome do arquivo (sem `.txt`) é o id do preset na CLI.
 - Empresas maiores, para o benchmark, vêm do **gerador** (seção 5), não de arquivos.
 
-### Presets iniciais
-| Preset | Forma | k |
-|---|---|---|
-| Squad Ágil | Líder ligado a 2 Devs e 1 Designer (estrela) | 4 |
-| Trio de Arquitetura | Arquiteto, Dev e DevOps todos ligados entre si (triângulo) | 3 |
-| Cadeia de Mentoria | Caminho Líder → Dev → Dev → QA | 4 |
-| Time Estrela | Clique de 4 (todos já trabalharam com todos) | 4 |
-| Squad de Produto | Líder, Designer, 2 Devs, QA, com ciclo + ramificação | 5–6 |
+### Presets
+Todos têm pelo menos uma equipe válida em `company.txt`.
+
+| Arquivo | Preset | Forma | k |
+|---|---|---|---|
+| `architecture_trio` | Trio de Arquitetura | Arquiteto, Dev e DevOps todos ligados entre si (triângulo) | 3 |
+| `agile_squad` | Squad Ágil | Líder ligado a 2 Devs e 1 Designer (estrela) | 4 |
+| `mentoring_chain` | Cadeia de Mentoria | Caminho Líder → Dev → Dev → QA | 4 |
+| `star_team` | Time Estrela | Líder, Dev, Designer e QA, todos ligados entre si (clique) | 4 |
+| `product_squad` | Squad de Produto | Ciclo Líder → Dev → Dev → QA → Líder, com Designer ligado ao Líder | 5 |
+
+O Squad de Produto ficou com k = 5: com k = 6, a força bruta passaria de 2 milhões de candidatos
+na empresa de 14 pessoas, acima do limite do trace (seção 4).
 
 ---
 
@@ -106,21 +113,28 @@ dois casos:
   primeira equipe. No modo "listar todas" retorna `true` e a busca continua, sem mudar o algoritmo.
 
 ```cpp
-// src/solver.hpp (esboço)
+// src/solver.hpp (resumo)
 enum class StepResult { Testing, Fail, Match };
 
 class SearchContext {
 public:
-    // map[i] = funcionário atribuído ao vértice i do molde (-1 = ainda não atribuído)
-    // failU/failV = aresta do molde que falhou, se houver (a interface pinta de vermelho)
+    // map[j] = funcionário atribuído ao vértice j do molde (-1 = ainda não atribuído)
+    // Em Fail: failU/failV = aresta do molde que não existe na empresa; ou failU = vértice do molde
+    // com papel errado e failV = -1. A interface pinta de vermelho o que falhou.
     // Retorna false se a busca deve parar (tempo limite, ou equipe encontrada no modo padrão).
     bool step(const int* map, int k, StepResult r, int failU = -1, int failV = -1);
 };
 
-// Implementado pelo Kleiton. Retorna true e preenche `mapping` se achou uma equipe.
+// Implementado pelo Kleiton. Retorna true e preenche `mapping` com a primeira equipe encontrada.
 bool bruteForce(const Graph& pattern, const Graph& company,
                 SearchContext& ctx, std::vector<int>& mapping);
 ```
+
+A documentação completa do contrato fica no começo de `src/solvers/brute_force.cpp`.
+
+Depois da busca, `runSolver` confere a equipe devolvida contra as três regras da seção 2 e avisa se ela
+for inválida. Essa conferência não fica disponível para os solvers: cada algoritmo faz a sua própria
+verificação.
 
 Os solvers ficam registrados numa lista (`src/solvers/registry.cpp`). Nas próximas etapas da disciplina,
 basta adicionar outro solver (backtracking, poda por papel, VF2…) e ele aparece automaticamente na
@@ -139,6 +153,12 @@ Serve para criar empresas de tamanho `n` arbitrário para o benchmark:
   fixo, empresas grandes ficariam densas demais.
 - **Modo "solução plantada":** embute o molde em posições aleatórias, garantindo que existe resposta.
 - **Modo "sem solução":** garante que não existe resposta, o que força a busca a percorrer tudo (pior caso).
+  Escolhe uma aresta `{u, v}` do molde e remove da empresa todas as colaborações entre alguém com o papel
+  de `u` e alguém com o papel de `v` (ex.: nenhum Líder trabalhou com nenhum Designer). Todos os papéis
+  continuam presentes, então a falta de um papel nunca resolve o problema sozinha.
+- Em todos os modos com molde, a empresa tem pelo menos tantos funcionários de cada papel quanto o molde exige.
+- O gerador de números aleatórios é próprio (não o `<random>`): a mesma `seed` gera o mesmo grafo, byte a
+  byte, no Windows e no Linux.
 
 ### Moldes
 Para a série com `k` crescente (Fase 6), gera moldes conexos aleatórios de `k` vértices, com papéis
@@ -202,12 +222,12 @@ SPEC.md
 src/
   graph.hpp / graph.cpp          Graph + leitura de arquivos
   solver.hpp / context.cpp       SearchContext, trace, timeout
-  generator.hpp / generator.cpp  gerador de empresas
+  generator.hpp / generator.cpp  gerador de empresas e moldes
   solvers/registry.cpp           lista de solvers
   solvers/brute_force.cpp        ← ALGORITMO DO KLEITON
   gui/                           interface (main, graph_view, panels)
   bench/main.cpp                 CLI de benchmark
-data/empresa.txt
+data/company.txt
 data/presets/*.txt
 assets/fonts/                    fonte TTF livre com acentos
 third_party/raylib/, third_party/raygui/
@@ -232,7 +252,7 @@ O Kleiton revisa o diff e faz o merge, e só então começa a fase seguinte. Os 
 ### ✅ Fase 0 — Repositório
 - Repositório público no GitHub, gitmoji-cli instalado, `.gitignore`, README básico e licença MIT.
 
-### Fase 1 — Toolchain e esqueleto de build
+### ✅ Fase 1 — Toolchain e esqueleto de build
 - Testar se o compilador atual compila a raylib. Se não compilar, instalar o w64devkit e documentar.
 - Vendorizar raylib 5.5 e raygui. Escrever o Makefile multiplataforma.
 - `src/gui/main.cpp` abre uma janela vazia com título e fonte carregada.
@@ -241,17 +261,20 @@ O Kleiton revisa o diff e faz o merge, e só então começa a fase seguinte. Os 
 
 ### Fase 2 — Núcleo de dados e contrato
 - `Graph`, leitor dos arquivos `.txt` com mensagens de erro claras (linha e motivo).
-- `data/empresa.txt` e os presets.
+- `data/company.txt` e os presets.
 - `solver.hpp`, `SearchContext` (trace, contador, timeout), registro de solvers e o **stub** de
   `brute_force.cpp` com comentários explicando o contrato.
 - Gerador de empresas (plantada / sem solução) e gerador de moldes.
+- CLI `teams_bench` com `--list`, `--run` (empresa do arquivo ou gerada), `--generate-company` e
+  `--generate-pattern`. As séries do benchmark ficam para a Fase 6.
 - **Checkpoint:** `teams_bench --list` lista os presets e a empresa; rodar o stub retorna "sem solução"
   sem travar.
 - **Para revisar:** o formato dos arquivos, os presets fazem sentido? O contrato da seção 4 está confortável para implementar?
 
 ### Fase 3 — Algoritmo de força bruta (Kleiton)
 - Implementar `bruteForce` seguindo o contrato. Pode rodar em paralelo com as Fases 4 e 5.
-- **Checkpoint:** a CLI encontra uma equipe válida para cada preset na `empresa.txt`.
+- **Checkpoint:** `teams_bench --run <preset>` encontra uma equipe válida para cada preset na
+  `company.txt`, e `--run <preset> --n 30 --mode nosolution` responde "sem solução".
 
 ### Fase 4 — Desenho dos grafos
 - Renderizar a empresa e o molde: cores por papel, nomes, legenda, layout a partir das posições do
