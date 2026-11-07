@@ -5,11 +5,11 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
 
+#include "dataset.hpp"
 #include "generator.hpp"
 #include "graph.hpp"
 #include "solver.hpp"
@@ -24,7 +24,6 @@
 #include <windows.h>
 #endif
 
-namespace fs = std::filesystem;
 
 namespace {
 
@@ -216,34 +215,6 @@ std::string presetPath(const Options& options, const std::string& preset) {
     return options.dataDir + "/presets/" + preset + ".txt";
 }
 
-struct PresetEntry {
-    std::string id;
-    Graph graph;
-};
-
-// Lê todos os presets da pasta, em ordem de dificuldade (k, depois número de arestas).
-bool loadPresets(const Options& options, std::vector<PresetEntry>& presets, std::string& error) {
-    const fs::path dir = fs::u8path(options.dataDir + "/presets");
-    std::error_code ec;
-    if (!fs::is_directory(dir, ec)) {
-        error = options.dataDir + "/presets: pasta não encontrada";
-        return false;
-    }
-    for (const auto& entry : fs::directory_iterator(dir, ec)) {
-        if (!entry.is_regular_file() || entry.path().extension() != ".txt") continue;
-        PresetEntry preset;
-        preset.id = entry.path().stem().u8string();
-        if (!loadGraphFile(entry.path().u8string(), preset.graph, error)) return false;
-        presets.push_back(std::move(preset));
-    }
-    std::sort(presets.begin(), presets.end(), [](const PresetEntry& a, const PresetEntry& b) {
-        if (a.graph.vertexCount() != b.graph.vertexCount()) return a.graph.vertexCount() < b.graph.vertexCount();
-        if (a.graph.edgeCount() != b.graph.edgeCount()) return a.graph.edgeCount() < b.graph.edgeCount();
-        return a.id < b.id;
-    });
-    return true;
-}
-
 // --- Comandos --------------------------------------------------------------------------------
 
 int commandList(const Options& options) {
@@ -258,13 +229,13 @@ int commandList(const Options& options) {
               << " colaborações\n";
     std::cout << "  Papéis: " << roleSummary(company) << "\n\n";
 
-    std::vector<PresetEntry> presets;
-    if (!loadPresets(options, presets, error)) {
+    std::vector<Preset> presets;
+    if (!loadPresets(options.dataDir, presets, error)) {
         std::cerr << "Erro: " << error << "\n";
         return 1;
     }
     std::cout << "Presets (" << options.dataDir << "/presets):\n";
-    for (const PresetEntry& preset : presets) {
+    for (const Preset& preset : presets) {
         std::cout << "  " << padRight(preset.id, 20) << padRight(preset.graph.name, 22) << "k="
                   << preset.graph.vertexCount() << "  arestas=" << padRight(std::to_string(preset.graph.edgeCount()), 3)
                   << "  " << roleSummary(preset.graph) << "\n";

@@ -1,0 +1,36 @@
+// Recursos do executável no Windows: ícone e informações de versão (nome, descrição, autor).
+// Executáveis sem essas informações são vistos com mais desconfiança por alguns antivírus.
+#pragma code_page(65001)
+
+#include <winver.h>
+
+1 ICON "../../third_party/raylib/src/raylib.ico"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     0,4,0,0
+PRODUCTVERSION  0,4,0,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "041604B0"
+        BEGIN
+            VALUE "CompanyName",      "Kleiton Cássio"
+            VALUE "FileDescription",  "Subgraph Team Matching - interface gráfica"
+            VALUE "FileVersion",      "0.4.0"
+            VALUE "InternalName",     "teams_gui"
+            VALUE "LegalCopyright",   "MIT License"
+            VALUE "OriginalFilename", "teams_gui.exe"
+            VALUE "ProductName",      "Subgraph Team Matching"
+            VALUE "ProductVersion",   "0.4.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0416, 1200
+    END
+END
