@@ -1,0 +1,12 @@
+name Squad Ágil
+desc Um líder que já trabalhou com dois devs e um designer
+vertices 4
+# id  papel     nome  x     y
+0     Lider     -     0.50  0.15
+1     Dev       -     0.15  0.80
+2     Dev       -     0.50  0.80
+3     Designer  -     0.85  0.80
+edges 3
+0 1
+0 2
+0 3

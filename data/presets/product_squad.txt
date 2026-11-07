@@ -1,0 +1,15 @@
+name Squad de Produto
+desc Ciclo líder, dev, dev, QA, com um designer ligado ao líder
+vertices 5
+# id  papel     nome  x     y
+0     Lider     -     0.50  0.12
+1     Designer  -     0.88  0.12
+2     Dev       -     0.15  0.50
+3     Dev       -     0.30  0.88
+4     QA        -     0.70  0.88
+edges 5
+0 1
+0 2
+2 3
+3 4
+4 0
