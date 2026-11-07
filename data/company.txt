@@ -1,51 +1,52 @@
 # Grafo social da empresa usado na demonstração.
 # Três grupos: produto A (esquerda), plataforma (centro) e produto B (direita), ligados por algumas
 # colaborações entre grupos. Posições desenhadas à mão (x, y em 0..1).
-# Os ids foram escolhidos para que as equipes válidas não apareçam logo nos primeiros candidatos
-# testados, o que deixa a animação da busca mais interessante.
+# A numeração foi escolhida para a demonstração: numa força bruta que testa os candidatos em ordem,
+# cada preset passa por candidatos com os papéis certos mas com alguma colaboração faltando antes de
+# encontrar a equipe, que aparece perto do meio da busca.
 name Empresa Exemplo
 desc 14 funcionários em três grupos: produto A, plataforma e produto B
 vertices 14
 # id  papel      nome     x     y
-0     Dados      Ana      0.50  0.08
-1     DevOps     Bruno    0.64  0.74
-2     DevOps     Carla    0.46  0.78
-3     Arquiteto  Diego    0.52  0.36
-4     QA         Elisa    0.05  0.50
-5     QA         Fábio    0.95  0.52
-6     Designer   Gabi     0.95  0.15
-7     Designer   Heitor   0.06  0.16
-8     Dev        Íris     0.68  0.42
-9     Dev        João     0.80  0.66
-10    Dev        Karen    0.18  0.72
-11    Dev        Lucas    0.36  0.55
-12    Lider      Marina   0.82  0.30
-13    Lider      Nuno     0.20  0.30
+0     Dev        Ana      0.68  0.42
+1     QA         Bruno    0.95  0.52
+2     Dev        Carla    0.80  0.66
+3     Designer   Diego    0.95  0.15
+4     Dev        Elisa    0.36  0.55
+5     Lider      Fábio    0.20  0.30
+6     Dev        Gabi     0.18  0.72
+7     Arquiteto  Heitor   0.52  0.36
+8     Dados      Íris     0.50  0.08
+9     QA         João     0.05  0.50
+10    DevOps     Karen    0.64  0.74
+11    Lider      Lucas    0.82  0.30
+12    Designer   Marina   0.06  0.16
+13    DevOps     Nuno     0.46  0.78
 edges 23
 # Produto A
-10 13
-11 13
-7 13
-4 13
-10 11
-7 10
-4 10
-4 7
-# Plataforma
-3 11
-2 11
-2 3
-1 3
-1 2
-0 3
-# Produto B
-8 12
-6 12
+5 6
+4 5
 5 12
-9 12
-8 9
 5 9
+4 6
+6 12
+6 9
+9 12
+# Plataforma
+4 7
+4 13
+7 13
+7 10
+10 13
+7 8
+# Produto B
+0 11
+3 11
+1 11
+2 11
+0 2
+1 2
 # Entre grupos
-0 13
+5 8
 0 8
-1 9
+2 10
