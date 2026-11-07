@@ -35,6 +35,8 @@ controles) já vêm dentro do repositório, em `third_party/`, e são compiladas
 |---|---|
 | `make` | compila tudo (a primeira vez demora mais, porque compila a raylib) |
 | `make run` | compila, se precisar, e abre a interface |
+| `make bench` | roda o benchmark (uns 5 minutos) e grava `results/bench.csv`; os gráficos ficam na aba Benchmark da interface |
+| `make bench BENCH_ARGS="--timeout 60"` | o mesmo, com tempo limite de 60 s por execução |
 | `make clean` | apaga os arquivos gerados pelo build |
 | `./bin/teams_bench --help` | linha de comando: lista os dados, roda um solver, gera instâncias |
 

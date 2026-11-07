@@ -100,6 +100,7 @@ void App::init(const std::string& executableDir) {
     applyGuiStyle(fonts_);
 
     dataDir_ = findDataDir(executableDir);
+    resultsPath_ = dataDir_ + "/../results/bench.csv";
     if (!loadPresets(dataDir_, presets_, error_)) return;
     if (!loadGraphFile(dataDir_ + "/company.txt", fileCompany_, error_)) return;
 
@@ -126,6 +127,15 @@ void App::selectCompany(int index) {
     if (isRunning() || index < 0 || index >= static_cast<int>(companyOptions().size())) return;
     selectedCompany_ = index;
     rebuildCompany();
+}
+
+void App::selectTab(int tab) {
+    if (tab < 0 || tab > 1) return;
+    activeTab_ = tab;
+    solverDropdownOpen_ = false;
+    companyDropdownOpen_ = false;
+    // Relê o CSV ao entrar na aba, para mostrar os resultados de um benchmark recém-rodado
+    if (tab == 1) benchView_.load(resultsPath_, &presets_);
 }
 
 void App::rebuildCompany() {
@@ -345,6 +355,14 @@ void App::frame() {
     const bool dropdownOpen = solverDropdownOpen_ || companyDropdownOpen_;
     const bool running = isRunning();
 
+    // Aba Benchmark: só o cabeçalho e os gráficos (a busca, se houver, continua rodando)
+    if (activeTab_ == 1) {
+        drawHeader();
+        benchView_.draw(fonts_, true);
+        EndDrawing();
+        return;
+    }
+
     // Atalhos de teclado da reprodução
     if (hasRun_ && !dropdownOpen && !running) {
         if (IsKeyPressed(KEY_SPACE)) {
@@ -384,19 +402,26 @@ void App::drawHeader() {
     DrawLine(0, static_cast<int>(kHeaderHeight), GetScreenWidth(), static_cast<int>(kHeaderHeight), theme::kBorder);
     drawText(fonts_.title, "Subgraph Team Matching", 20, 16, theme::kTextPrimary);
 
-    // Abas (a de benchmark entra na Fase 6)
+    // Abas (clicáveis; com uma lista de seleção aberta, ficam travadas)
     float x = 320;
     const char* tabs[] = {"Visualização", "Benchmark"};
+    const bool dropdownOpen = solverDropdownOpen_ || companyDropdownOpen_;
+    const Vector2 mouse = GetMousePosition();
     for (int i = 0; i < 2; ++i) {
-        const bool active = i == 0;
-        drawText(fonts_.bodyBold, tabs[i], x, 20, active ? theme::kAccent : theme::kTextMuted);
+        const bool active = i == activeTab_;
         const float w = measureText(fonts_.bodyBold, tabs[i]);
+        const Rectangle hit = {x - 8, 8, w + 16, kHeaderHeight - 8};
+        const bool hovered = !dropdownOpen && CheckCollisionPointRec(mouse, hit);
+        if (hovered && !active && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) selectTab(i);
+        const Color color = active ? theme::kAccent : (hovered ? theme::kTextSecondary : theme::kTextMuted);
+        drawText(fonts_.bodyBold, tabs[i], x, 20, color);
         if (active) DrawRectangle(static_cast<int>(x), static_cast<int>(kHeaderHeight) - 3, static_cast<int>(w), 3, theme::kAccent);
         x += w + 32;
     }
 
-    const char* hint = hasRun_ ? "Espaço: reproduzir/pausar · ←/→: passo a passo"
-                               : "Escolha um molde e uma empresa e execute a busca";
+    const char* hint = activeTab_ == 1 ? "Passe o mouse sobre os pontos para ver os detalhes"
+                       : hasRun_       ? "Espaço: reproduzir/pausar · ←/→: passo a passo"
+                                       : "Escolha um molde e uma empresa e execute a busca";
     drawTextRight(fonts_.small, hint, GetScreenWidth() - 20.0f, 21, theme::kTextMuted);
 }
 
