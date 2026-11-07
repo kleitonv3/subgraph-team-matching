@@ -3,6 +3,7 @@
 # Compila a raylib vendorizada (third_party/) e a interface. Só precisa de um compilador C/C++ e do make.
 #   make          compila tudo: a interface (bin/teams_gui) e a CLI (bin/teams_bench)
 #   make run      abre a interface
+#   make bench    roda o benchmark e grava results/bench.csv (ex.: make bench BENCH_ARGS="--timeout 60")
 #   make clean    apaga os artefatos de build
 #
 # No Windows, use o make do w64devkit (veja o README).
@@ -52,16 +53,17 @@ CFLAGS   := -std=c99 -O2 -MMD -MP -I$(RAYLIB_SRC) -I$(RAYGUI_DIR)
 
 # Núcleo compartilhado pela interface e pelo benchmark (não depende da raylib)
 CORE_SRCS   := src/graph.cpp src/context.cpp src/generator.cpp src/dataset.cpp src/format.cpp \
-               src/solvers/registry.cpp
+               src/bench_csv.cpp src/solvers/registry.cpp
 # Um arquivo por solver (registrado em src/solvers/registry.cpp)
 SOLVER_SRCS := src/solvers/brute_force.cpp
 CORE_OBJS   := $(addprefix $(BUILD_DIR)/,$(CORE_SRCS:.cpp=.o) $(SOLVER_SRCS:.cpp=.o))
 
-GUI_CXX_SRCS := src/gui/main.cpp src/gui/app.cpp src/gui/theme.cpp src/gui/layout.cpp src/gui/graph_view.cpp
+GUI_CXX_SRCS := src/gui/main.cpp src/gui/app.cpp src/gui/theme.cpp src/gui/layout.cpp src/gui/graph_view.cpp \
+                src/gui/bench_view.cpp
 GUI_C_SRCS   := src/gui/raygui_impl.c
 GUI_OBJS     := $(addprefix $(BUILD_DIR)/,$(GUI_CXX_SRCS:.cpp=.o) $(GUI_C_SRCS:.c=.o))
 
-BENCH_SRCS := src/bench/main.cpp
+BENCH_SRCS := src/bench/main.cpp src/bench/benchmark.cpp
 BENCH_OBJS := $(addprefix $(BUILD_DIR)/,$(BENCH_SRCS:.cpp=.o))
 
 # ---------------------------------------------------------------------------
@@ -97,12 +99,16 @@ BENCH_BIN := $(BIN_DIR)/teams_bench$(EXE)
 # ---------------------------------------------------------------------------
 # Alvos
 # ---------------------------------------------------------------------------
-.PHONY: all run clean
+.PHONY: all run bench clean
 
 all: $(GUI_BIN) $(BENCH_BIN)
 
 run: $(GUI_BIN)
 	./$(GUI_BIN)
+
+# Opções extras: make bench BENCH_ARGS="--timeout 60" (veja ./bin/teams_bench --help)
+bench: $(BENCH_BIN)
+	./$(BENCH_BIN) --bench $(BENCH_ARGS)
 
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)

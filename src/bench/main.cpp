@@ -1,14 +1,17 @@
-// teams_bench: interface de linha de comando para listar os dados, rodar um solver e gerar instâncias.
-// As séries completas do benchmark (CSV) entram na Fase 6.
+// teams_bench: interface de linha de comando para listar os dados, rodar um solver, gerar instâncias e
+// rodar as séries do benchmark (--bench), que gravam results/bench.csv.
 
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
 
+#include "benchmark.hpp"
 #include "dataset.hpp"
 #include "format.hpp"
 #include "generator.hpp"
@@ -35,6 +38,7 @@ Comandos:
   --run PRESET               roda um solver num preset
   --generate-company N       escreve na saída uma empresa gerada com N funcionários
   --generate-pattern K       escreve na saída um molde aleatório com K vértices
+  --bench                    roda as séries do benchmark e grava o CSV (veja abaixo)
   --help                     mostra esta ajuda
 
 Opções:
@@ -49,6 +53,17 @@ Opções:
   --timeout SEG              tempo limite do --run em segundos (padrão: 10; 0 = sem limite)
   --all                      no --run, continua depois da primeira equipe e conta todas
 
+Opções do --bench:
+  --out ARQUIVO              onde gravar o CSV (padrão: results/bench.csv)
+  --timeout SEG              tempo limite de cada execução (padrão: 10)
+  --series S                 n, k ou all (padrão: all)
+  --only PRESET              só um preset na série n crescente
+  --solver ID                só um solver (padrão: todos os registrados)
+  --reps R                   repetições no modo plantada, com seeds 1..R (padrão: 3)
+  --max-n N                  maior empresa da série n crescente (padrão: 4096)
+  --k-n N                    tamanho fixo da empresa na série k crescente (padrão: 20)
+  --degree D                 grau médio das empresas geradas (padrão: 6)
+
 PRESET pode ser o nome de um arquivo em <data>/presets (sem .txt) ou o caminho de um arquivo.
 
 Exemplos:
@@ -56,6 +71,7 @@ Exemplos:
   teams_bench --run agile_squad
   teams_bench --run star_team --n 200 --mode nosolution --timeout 30
   teams_bench --generate-company 50 --pattern agile_squad --mode planted --seed 7
+  teams_bench --bench --timeout 60
 )";
 
 struct Options {
@@ -65,12 +81,21 @@ struct Options {
     std::string companyFile;
     std::string pattern;
     std::string solver = "brute_force";
+    bool solverGiven = false;
     CompanyMode mode = CompanyMode::Planted;
     int n = 0;
     double degree = 6.0;
     std::uint64_t seed = 1;
     double timeout = 10.0;
     bool findAll = false;
+
+    // --bench
+    std::string out = "results/bench.csv";
+    std::string series = "all";
+    std::string only;
+    int reps = 3;
+    int maxN = 4096;
+    int growKSize = 20;
 };
 
 // --- Formatação ------------------------------------------------------------------------------
@@ -141,7 +166,7 @@ bool parseArgs(int argc, char** argv, Options& options, std::string& error) {
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         std::string value;
-        if (arg == "--list" || arg == "--help" || arg == "-h") {
+        if (arg == "--list" || arg == "--help" || arg == "-h" || arg == "--bench") {
             options.command = arg == "-h" ? "--help" : arg;
         } else if (arg == "--run" || arg == "--generate-company" || arg == "--generate-pattern") {
             options.command = arg;
@@ -154,6 +179,23 @@ bool parseArgs(int argc, char** argv, Options& options, std::string& error) {
             if (!needValue(i, options.pattern)) return false;
         } else if (arg == "--solver") {
             if (!needValue(i, options.solver)) return false;
+            options.solverGiven = true;
+        } else if (arg == "--out") {
+            if (!needValue(i, options.out)) return false;
+        } else if (arg == "--series") {
+            if (!needValue(i, options.series)) return false;
+            if (options.series != "n" && options.series != "k" && options.series != "all") {
+                error = "série inválida: \"" + options.series + "\" (válidas: n, k, all)";
+                return false;
+            }
+        } else if (arg == "--only") {
+            if (!needValue(i, options.only)) return false;
+        } else if (arg == "--reps") {
+            if (!needValue(i, value) || !toInt(value, options.reps)) return false;
+        } else if (arg == "--max-n") {
+            if (!needValue(i, value) || !toInt(value, options.maxN)) return false;
+        } else if (arg == "--k-n") {
+            if (!needValue(i, value) || !toInt(value, options.growKSize)) return false;
         } else if (arg == "--n") {
             if (!needValue(i, value) || !toInt(value, options.n)) return false;
         } else if (arg == "--mode") {
@@ -335,6 +377,52 @@ int commandGeneratePattern(const Options& options) {
     return 0;
 }
 
+int commandBench(const Options& options) {
+    std::string error;
+    std::vector<Preset> presets;
+    if (!loadPresets(options.dataDir, presets, error)) {
+        std::cerr << "Erro: " << error << "\n";
+        return 1;
+    }
+    if (!options.only.empty() &&
+        std::none_of(presets.begin(), presets.end(), [&](const Preset& p) { return p.id == options.only; })) {
+        std::cerr << "Erro: preset desconhecido \"" << options.only << "\" (veja --list)\n";
+        return 1;
+    }
+    if (options.solverGiven && !findSolver(options.solver)) {
+        std::cerr << "Erro: solver desconhecido \"" << options.solver << "\" (veja --list)\n";
+        return 1;
+    }
+
+    // Cria a pasta do arquivo de saída, se precisar
+    const std::filesystem::path outPath = std::filesystem::u8path(options.out);
+    std::error_code ec;
+    if (outPath.has_parent_path()) std::filesystem::create_directories(outPath.parent_path(), ec);
+    std::ofstream csv(outPath, std::ios::binary);
+    if (!csv) {
+        std::cerr << "Erro: não foi possível criar " << options.out << "\n";
+        return 1;
+    }
+
+    BenchConfig config;
+    config.timeoutSeconds = options.timeout;
+    config.plantedReps = options.reps;
+    config.averageDegree = options.degree;
+    config.maxN = options.maxN;
+    config.growKCompanySize = options.growKSize;
+    config.runGrowN = options.series != "k";
+    config.runGrowK = options.series != "n";
+    config.onlyPreset = options.only;
+    if (options.solverGiven) config.onlySolver = options.solver;
+
+    std::cout << "Benchmark · tempo limite " << formatDuration(options.timeout) << " por execução · grau médio "
+              << options.degree << "\n";
+    std::cout << "Resultados em " << options.out << "\n\n";
+    const int status = runBenchmark(config, presets, csv, std::cout);
+    std::cout << "Pronto. Abra a aba Benchmark da interface para ver os gráficos.\n";
+    return status;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -354,6 +442,7 @@ int main(int argc, char** argv) {
     if (options.command == "--run") return commandRun(options);
     if (options.command == "--generate-company") return commandGenerateCompany(options);
     if (options.command == "--generate-pattern") return commandGeneratePattern(options);
+    if (options.command == "--bench") return commandBench(options);
     std::cout << kUsage;
     return 0;
 }
