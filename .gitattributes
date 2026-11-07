@@ -1,0 +1,17 @@
+# Texto sempre com LF no repositório e na cópia de trabalho (Makefile e scripts quebram com CRLF no Linux)
+* text=auto eol=lf
+
+# Scripts do Windows precisam de CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binários: nunca converter
+*.ttf binary
+*.otf binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.a   binary
+*.lib binary
+*.dll binary
+*.exe binary
