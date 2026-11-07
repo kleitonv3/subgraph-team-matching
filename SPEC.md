@@ -186,8 +186,9 @@ sorteados e `seed`.
 | `make bench` | roda o benchmark e gera `results/bench.csv` |
 | `make clean` | apaga os artefatos de build |
 
-- **Windows:** MinGW-w64 ou w64devkit. O MinGW.org GCC 6.3 que está instalado hoje provavelmente é antigo
-  demais; isso é testado na Fase 1.
+- **Windows:** w64devkit (versão de referência: 2.10.1). O MinGW.org GCC 6.3 foi testado na Fase 1 e **não**
+  compila a raylib: faltam headers do Windows (`minwindef.h`, `dinput.h`).
+- O módulo de áudio da raylib (`raudio`) não é compilado, porque o projeto não usa som.
 - **Linux:** `build-essential` + `libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev`.
 
 ---
