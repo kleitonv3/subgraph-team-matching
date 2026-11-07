@@ -26,6 +26,11 @@ void SearchContext::onMatch(const int* map, int k) {
 }
 
 void SearchContext::checkClock() {
+    if (options_.cancel && options_.cancel->load(std::memory_order_relaxed)) {
+        cancelled_ = true;
+        stopped_ = true;
+        return;
+    }
     if (options_.timeLimitSeconds <= 0.0 || timedOut_) return;
     const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - startTime_;
     if (elapsed.count() >= options_.timeLimitSeconds) {
@@ -91,6 +96,7 @@ RunResult runSolver(const SolverInfo& solver, const Graph& pattern, const Graph&
     result.steps = ctx.stepCount();
     result.matches = ctx.matchCount();
     result.timedOut = ctx.timedOut();
+    result.cancelled = ctx.cancelled();
     if (result.found) {
         result.mapping = mapping;
         validateMapping(pattern, company, mapping, result.invalidReason);

@@ -74,8 +74,10 @@ edges 3
 ```
 
 - `data/company.txt` é o grafo social fixo (14 funcionários em três grupos) usado na demonstração, com
-  posições desenhadas à mão para ficar legível. Os ids foram escolhidos para que as equipes válidas não
-  apareçam logo nos primeiros candidatos testados, o que deixa a animação mais interessante.
+  posições desenhadas à mão para ficar legível. A numeração foi escolhida para a demonstração: numa força
+  bruta que testa os candidatos em ordem (papéis antes das arestas), cada preset passa por candidatos com
+  os papéis certos mas com alguma colaboração faltando (arestas vermelhas) antes de encontrar a equipe,
+  que aparece entre 38% e 53% da busca. Outra ordem de enumeração muda esses números.
 - `data/presets/*.txt` são os moldes de equipe. O nome do arquivo (sem `.txt`) é o id do preset na CLI.
 - Empresas maiores, para o benchmark, vêm do **gerador** (seção 5), não de arquivos.
 
@@ -285,7 +287,7 @@ O Kleiton revisa o diff e faz o merge, e só então começa a fase seguinte. Os 
 - **Checkpoint:** `teams_bench --run <preset>` encontra uma equipe válida para cada preset na
   `company.txt`, e `--run <preset> --n 30 --mode nosolution` responde "sem solução".
 
-### Fase 4 — Desenho dos grafos
+### ✅ Fase 4 — Desenho dos grafos
 - Renderizar a empresa e o molde: cores por papel, nomes, legenda, layout a partir das posições do
   arquivo (ou layout automático para empresas geradas).
 - Painel de presets com miniatura do molde e seleção de solver/empresa.
@@ -293,9 +295,21 @@ O Kleiton revisa o diff e faz o merge, e só então começa a fase seguinte. Os 
 - **Para revisar:** visual geral (cores, legibilidade, disposição dos painéis).
 
 ### Fase 5 — Execução e reprodução passo a passo
-- Botão Executar: roda o solver em modo visual e guarda o trace.
-- Controles de reprodução, destaque do candidato atual, arestas verde/vermelho, painel "Equipe formada",
-  aviso de trace truncado.
+- Botão Executar: roda o solver em modo visual e guarda o trace. A busca roda numa thread separada (a
+  janela continua respondendo), com botão **Cancelar** e tempo limite de 60 s.
+- Controles de reprodução: início, passo anterior, reproduzir/pausar, próximo passo, fim, velocidade
+  (1 a 10.000 passos/s), linha do tempo arrastável e "Pular para a solução". Atalhos: Espaço, ←/→,
+  Home/End. A reprodução pausa sozinha ao chegar na equipe encontrada.
+- Destaques do passo atual:
+  - os funcionários do candidato ficam em destaque, com o número da posição do molde (1, 2, 3...);
+    os demais ficam esmaecidos;
+  - papel errado: anel vermelho no funcionário e na posição do molde (as arestas não são destacadas);
+  - papéis certos: cada aresta do molde fica verde se a colaboração existe, ou vermelha (tracejada na
+    empresa) se falta;
+  - uma frase no rodapé explica o passo (ex.: "Falha: falta a colaboração entre Fábio (1) e Diego (4)").
+- O resultado ("Equipe encontrada", painel "Equipe formada") só aparece quando a reprodução chega nele.
+- Trace truncado: aviso com quantos passos foram gravados; "Pular para a solução" mostra a equipe final
+  mesmo que ela tenha sido encontrada depois do limite do trace.
 - **Checkpoint:** com o algoritmo da Fase 3 (ou o solver descartável), a busca é reproduzida do início
   até a solução.
 - **Para revisar:** a animação explica bem o que a força bruta está fazendo?

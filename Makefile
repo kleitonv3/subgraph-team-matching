@@ -51,7 +51,8 @@ CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -MMD -MP -Isrc -I$(RAYLIB_SRC) -I$(RAYG
 CFLAGS   := -std=c99 -O2 -MMD -MP -I$(RAYLIB_SRC) -I$(RAYGUI_DIR)
 
 # Núcleo compartilhado pela interface e pelo benchmark (não depende da raylib)
-CORE_SRCS   := src/graph.cpp src/context.cpp src/generator.cpp src/dataset.cpp src/solvers/registry.cpp
+CORE_SRCS   := src/graph.cpp src/context.cpp src/generator.cpp src/dataset.cpp src/format.cpp \
+               src/solvers/registry.cpp
 # Um arquivo por solver (registrado em src/solvers/registry.cpp)
 SOLVER_SRCS := src/solvers/brute_force.cpp
 CORE_OBJS   := $(addprefix $(BUILD_DIR)/,$(CORE_SRCS:.cpp=.o) $(SOLVER_SRCS:.cpp=.o))
@@ -80,6 +81,9 @@ ifeq ($(PLATFORM),linux)
     EXE      :=
     # O GLFW precisa saber qual sistema de janelas usar no Linux (X11 funciona também sob Wayland)
     RAYLIB_CFLAGS += -D_GNU_SOURCE -D_GLFW_X11
+    # A interface roda a busca numa thread separada
+    CXXFLAGS += -pthread
+    LDFLAGS  := -pthread
     LDLIBS   := -lGL -lm -lpthread -ldl -lrt -lX11
 endif
 ifeq ($(PLATFORM),macos)

@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -52,6 +53,9 @@ struct SearchOptions {
     std::size_t traceLimit = 500000;    // acima disso, só conta os passos
     double timeLimitSeconds = 0.0;      // 0 = sem limite
     bool findAll = false;               // continua depois de achar uma equipe ("listar todas")
+    // Se informado, a busca para quando o valor virar true (botão "Cancelar" da interface, que roda a
+    // busca em outra thread). Consultado junto com o relógio, a cada 1024 passos.
+    const std::atomic<bool>* cancel = nullptr;
 };
 
 class SearchContext {
@@ -79,6 +83,7 @@ public:
     std::uint64_t stepCount() const { return steps_; }
     std::uint64_t matchCount() const { return matches_; }
     bool timedOut() const { return timedOut_; }
+    bool cancelled() const { return cancelled_; }
     const Trace& trace() const { return trace_; }
     bool traceTruncated() const { return traceTruncated_; }
     // Primeira equipe informada com Match (vazio se nenhuma).
@@ -101,6 +106,7 @@ private:
     std::uint64_t matches_ = 0;
     bool stopped_ = false;
     bool timedOut_ = false;
+    bool cancelled_ = false;
     bool traceTruncated_ = false;
     Trace trace_;
     std::vector<int> firstMatch_;
@@ -137,6 +143,7 @@ struct RunResult {
     std::uint64_t steps = 0;
     std::uint64_t matches = 0;
     bool timedOut = false;
+    bool cancelled = false;
     double seconds = 0.0;
     // Preenchido se o solver disse ter achado uma equipe, mas o mapeamento não é válido.
     std::string invalidReason;

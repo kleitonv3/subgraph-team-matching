@@ -1,13 +1,13 @@
 #include "app.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
+#include "format.hpp"
 #include "generator.hpp"
-#include "graph_view.hpp"
 #include "layout.hpp"
 #include "raygui.h"
-#include "solver.hpp"
 
 namespace {
 
@@ -28,6 +28,8 @@ const Rectangle kRunButton = {28, 582, 238, 34};
 
 // Grau médio das empresas geradas na interface: menor que o do benchmark, para o desenho ficar legível.
 constexpr double kGuiAverageDegree = 4.0;
+// Tempo limite das buscas feitas pela interface (dá para cancelar antes).
+constexpr double kGuiTimeLimitSeconds = 60.0;
 
 // --- Utilidades de desenho ---------------------------------------------------------------------
 
@@ -38,6 +40,10 @@ void drawPanel(Rectangle area) {
 
 void drawSectionLabel(const Fonts& fonts, const char* text, float x, float y) {
     drawText(fonts.small, text, x, y, theme::kTextMuted);
+}
+
+void drawTextRight(const Font& font, const std::string& text, float right, float y, Color color) {
+    drawText(font, text.c_str(), right - measureText(font, text.c_str()), y, color);
 }
 
 // Quebra o texto em linhas de no máximo `width` pixels.
@@ -62,18 +68,19 @@ std::vector<std::string> wrapText(const Font& font, const std::string& text, flo
     return lines;
 }
 
-std::string plural(int count, const char* singular, const char* pluralForm) {
-    return std::to_string(count) + " " + (count == 1 ? singular : pluralForm);
-}
-
 Rectangle cardRect(int index) {
     return {kPresetPanel.x + 12, kCardTop + index * (kCardHeight + kCardGap), kPresetPanel.width - 24, kCardHeight};
+}
+
+std::string personName(const Graph& company, int v) {
+    const std::string& name = company.vertex(v).name;
+    return name.empty() ? "Funcionário #" + std::to_string(v) : name;
 }
 
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------
-// Inicialização
+// Inicialização e seleção
 // ---------------------------------------------------------------------------------------------
 
 const std::vector<App::CompanyOption>& App::companyOptions() {
@@ -100,15 +107,29 @@ void App::init(const std::string& executableDir) {
     selectPreset(0);
 }
 
-void App::shutdown() { unloadFonts(fonts_); }
+void App::shutdown() {
+    if (worker_.joinable()) {
+        cancel_.store(true);
+        worker_.join();
+    }
+    unloadFonts(fonts_);
+}
 
 void App::selectPreset(int index) {
+    if (isRunning() || index < 0 || index >= static_cast<int>(presets_.size())) return;
     selectedPreset_ = index;
     // As empresas geradas embutem o molde escolhido, então mudam junto com ele
     rebuildCompany();
 }
 
+void App::selectCompany(int index) {
+    if (isRunning() || index < 0 || index >= static_cast<int>(companyOptions().size())) return;
+    selectedCompany_ = index;
+    rebuildCompany();
+}
+
 void App::rebuildCompany() {
+    resetRun();
     const CompanyOption& option = companyOptions()[selectedCompany_];
     if (option.generatedSize == 0) {
         company_ = fileCompany_;
@@ -130,10 +151,188 @@ void App::rebuildCompany() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Execução da busca
+// ---------------------------------------------------------------------------------------------
+
+void App::resetRun() {
+    if (worker_.joinable()) {
+        cancel_.store(true);
+        worker_.join();
+    }
+    ctx_.reset();
+    result_ = RunResult();
+    hasRun_ = false;
+    matchStep_ = kNoStep;
+    current_ = 0;
+    playing_ = false;
+    stepAccumulator_ = 0.0;
+    showFinal_ = false;
+}
+
+void App::startRun() {
+    if (isRunning() || !error_.empty()) return;
+    resetRun();
+
+    const SolverInfo& solver = allSolvers()[selectedSolver_];
+    solverName_ = solver.displayName;
+
+    SearchOptions options;
+    options.recordTrace = true;
+    options.timeLimitSeconds = kGuiTimeLimitSeconds;
+    options.cancel = &cancel_;
+    ctx_ = std::make_unique<SearchContext>(options);
+
+    cancel_.store(false);
+    running_.store(true, std::memory_order_release);
+    runStartTime_ = GetTime();
+
+    // A thread só lê o molde e a empresa (que não mudam enquanto a busca roda: a tela fica travada)
+    // e só escreve em result_ e ctx_, que a thread principal lê depois que running_ vira false.
+    const Graph* pattern = &presets_[selectedPreset_].graph;
+    worker_ = std::thread([this, &solver, pattern]() {
+        result_ = runSolver(solver, *pattern, company_, *ctx_);
+        running_.store(false, std::memory_order_release);
+    });
+}
+
+void App::pollRun() {
+    if (!worker_.joinable() || isRunning()) return;
+    worker_.join();
+    hasRun_ = true;
+
+    const Trace& trace = ctx_->trace();
+    for (std::size_t i = 0; i < trace.size(); ++i) {
+        if (trace.step(i).result == StepResult::Match) {
+            matchStep_ = i;
+            break;
+        }
+    }
+    current_ = 0;
+    playing_ = trace.size() > 1;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Reprodução
+// ---------------------------------------------------------------------------------------------
+
+std::size_t App::lastStep() const {
+    const std::size_t size = ctx_ ? ctx_->trace().size() : 0;
+    return size == 0 ? 0 : size - 1;
+}
+
+float App::stepsPerSecond() const { return std::pow(10.0f, 4.0f * speedSlider_); }
+
+void App::seek(std::size_t step) {
+    if (!hasRun_) return;
+    current_ = std::min(step, lastStep());
+    playing_ = false;
+    showFinal_ = false;
+    stepAccumulator_ = 0.0;
+}
+
+void App::updatePlayback() {
+    if (!hasRun_ || !playing_) return;
+    stepAccumulator_ += GetFrameTime() * stepsPerSecond();
+    const auto advance = static_cast<std::size_t>(stepAccumulator_);
+    if (advance == 0) return;
+    stepAccumulator_ -= static_cast<double>(advance);
+
+    std::size_t next = std::min(current_ + advance, lastStep());
+    // Pausa sozinho quando chega na equipe encontrada
+    if (matchStep_ != kNoStep && current_ < matchStep_ && next >= matchStep_) {
+        next = matchStep_;
+        playing_ = false;
+    }
+    current_ = next;
+    if (current_ >= lastStep()) playing_ = false;
+}
+
+bool App::teamRevealed() const {
+    if (!hasRun_) return false;
+    if (showFinal_ || ctx_->trace().size() == 0) return true;
+    if (matchStep_ != kNoStep && current_ >= matchStep_) return true;
+    return current_ >= lastStep();
+}
+
+bool App::displayedStep(DisplayedStep& step) const {
+    if (!hasRun_) return false;
+    if (showFinal_ && result_.found) {
+        step.map = result_.mapping.data();
+        step.k = static_cast<int>(result_.mapping.size());
+        step.result = StepResult::Match;
+        return true;
+    }
+    const Trace& trace = ctx_->trace();
+    if (trace.size() == 0) return false;
+    const TraceStep& info = trace.step(current_);
+    step.map = trace.mapping(current_);
+    step.k = trace.patternSize();
+    step.result = info.result;
+    step.failU = info.failU;
+    step.failV = info.failV;
+    return true;
+}
+
+void App::buildHighlights(const DisplayedStep& step, GraphHighlight& companyHl, GraphHighlight& patternHl) const {
+    const Graph& pattern = presets_[selectedPreset_].graph;
+    const int n = company_.vertexCount();
+    const int k = std::min(step.k, pattern.vertexCount());
+    const bool match = step.result == StepResult::Match;
+
+    auto assigned = [&](int j) { return j >= 0 && j < k && step.map[j] >= 0 && step.map[j] < n; };
+    auto isReportedEdge = [&](int u, int v) {
+        return step.failV >= 0 && ((u == step.failU && v == step.failV) || (u == step.failV && v == step.failU));
+    };
+
+    companyHl.vertexAlpha.assign(n, 0.25f);
+    companyHl.badge.assign(n, 0);
+    companyHl.ring.assign(n, Color{0, 0, 0, 0});
+    companyHl.edgeAlpha = 0.35f;
+    patternHl.badge.assign(pattern.vertexCount(), 0);
+    patternHl.ring.assign(pattern.vertexCount(), Color{0, 0, 0, 0});
+
+    // Vértices: cada posição j do molde e o funcionário escolhido para ela recebem o número j + 1
+    for (int j = 0; j < pattern.vertexCount(); ++j) {
+        patternHl.badge[j] = j + 1;
+        if (!assigned(j)) continue;
+        const int person = step.map[j];
+        const bool roleWrong = company_.role(person) != pattern.role(j) || (step.failU == j && step.failV < 0);
+        const Color ring = roleWrong ? theme::kFail : (match ? theme::kOk : Fade(theme::kAccent, 0.6f));
+
+        companyHl.vertexAlpha[person] = 1.0f;
+        companyHl.badge[person] = j + 1;
+        companyHl.ring[person] = ring;
+        if (roleWrong || match) patternHl.ring[j] = roleWrong ? theme::kFail : theme::kOk;
+    }
+
+    // Se algum papel não bate, o motivo da falha é o papel: as arestas não são destacadas
+    bool rolesOk = !(step.failU >= 0 && step.failV < 0);
+    for (int j = 0; j < pattern.vertexCount() && rolesOk; ++j) {
+        if (assigned(j) && company_.role(step.map[j]) != pattern.role(j)) rolesOk = false;
+    }
+    if (!rolesOk) return;
+
+    // Arestas do molde: verde se a colaboração existe na empresa, vermelho (tracejado) se falta
+    for (const auto& edge : pattern.edges()) {
+        const int u = edge.first;
+        const int v = edge.second;
+        if (!assigned(u) || !assigned(v)) continue;
+        const bool exists = company_.hasEdge(step.map[u], step.map[v]);
+        const float bonus = isReportedEdge(u, v) ? 2.0f : 0.0f;
+        const Color color = exists ? theme::kOk : theme::kFail;
+        companyHl.lines.push_back({step.map[u], step.map[v], color, (exists ? 4.0f : 3.0f) + bonus, !exists});
+        patternHl.lines.push_back({u, v, color, 4.0f + bonus, false});
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Quadro
 // ---------------------------------------------------------------------------------------------
 
 void App::frame() {
+    pollRun();
+    updatePlayback();
+
     BeginDrawing();
     ClearBackground(theme::kBackground);
 
@@ -143,16 +342,36 @@ void App::frame() {
         return;
     }
 
-    // Com uma lista de seleção aberta, o resto da tela não recebe cliques
     const bool dropdownOpen = solverDropdownOpen_ || companyDropdownOpen_;
+    const bool running = isRunning();
+
+    // Atalhos de teclado da reprodução
+    if (hasRun_ && !dropdownOpen && !running) {
+        if (IsKeyPressed(KEY_SPACE)) {
+            if (!playing_ && current_ >= lastStep()) seek(0);
+            playing_ = !playing_;
+        }
+        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT)) seek(current_ + 1);
+        if ((IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT)) && current_ > 0) seek(current_ - 1);
+        if (IsKeyPressed(KEY_HOME)) seek(0);
+        if (IsKeyPressed(KEY_END)) seek(lastStep());
+    }
+
+    GraphHighlight companyHl;
+    GraphHighlight patternHl;
+    DisplayedStep step;
+    const bool showStep = displayedStep(step);
+    if (showStep) buildHighlights(step, companyHl, patternHl);
+
+    // Com uma lista de seleção aberta, o resto da tela não recebe cliques
     if (dropdownOpen) GuiLock();
 
     drawHeader();
-    drawPresetPanel(!dropdownOpen);
-    drawCompanyView(!dropdownOpen);
-    drawPatternPanel();
-    drawPlaybackBar();
-    drawControls();
+    drawPresetPanel(!dropdownOpen && !running);
+    drawCompanyView(!dropdownOpen, showStep ? &companyHl : nullptr);
+    drawPatternPanel(showStep ? &patternHl : nullptr);
+    drawPlaybackBar(!dropdownOpen && !running);
+    drawControls(!running);
 
     GuiUnlock();
     if (!dropdownOpen) drawTooltip();
@@ -176,8 +395,9 @@ void App::drawHeader() {
         x += w + 32;
     }
 
-    const char* hint = "Escolha um molde e uma empresa";
-    drawText(fonts_.small, hint, GetScreenWidth() - 20 - measureText(fonts_.small, hint), 21, theme::kTextMuted);
+    const char* hint = hasRun_ ? "Espaço: reproduzir/pausar · ←/→: passo a passo"
+                               : "Escolha um molde e uma empresa e execute a busca";
+    drawTextRight(fonts_.small, hint, GetScreenWidth() - 20.0f, 21, theme::kTextMuted);
 }
 
 void App::drawPresetPanel(bool inputEnabled) {
@@ -207,25 +427,54 @@ void App::drawPresetPanel(bool inputEnabled) {
 
         const Graph& g = presets_[i].graph;
         drawText(fonts_.bodyBold, g.name.c_str(), card.x + 66, card.y + 12, theme::kTextPrimary);
-        const std::string meta = "k = " + std::to_string(g.vertexCount()) + " · " + plural(g.edgeCount(), "aresta", "arestas");
+        const std::string meta = "k = " + std::to_string(g.vertexCount()) + " · " + formatCount(g.edgeCount(), "aresta", "arestas");
         drawText(fonts_.small, meta.c_str(), card.x + 66, card.y + 34, theme::kTextSecondary);
     }
 
     drawSectionLabel(fonts_, "SOLVER", kSolverDropdown.x, kSolverDropdown.y - 20);
     drawSectionLabel(fonts_, "EMPRESA", kCompanyDropdown.x, kCompanyDropdown.y - 20);
-
-    // A execução entra na Fase 5
-    GuiDisable();
-    GuiButton(kRunButton, GuiIconText(ICON_PLAYER_PLAY, "Executar busca"));
-    GuiEnable();
 }
 
-void App::drawCompanyView(bool inputEnabled) {
+void App::drawCompanyView(bool inputEnabled, const GraphHighlight* highlight) {
     drawPanel(kCompanyPanel);
-    drawText(fonts_.bodyBold, company_.name.c_str(), kCompanyPanel.x + 16, 80, theme::kTextPrimary);
-    const std::string meta = plural(company_.vertexCount(), "funcionário", "funcionários") + " · " +
-                             plural(company_.edgeCount(), "colaboração", "colaborações");
-    drawText(fonts_.small, meta.c_str(), kCompanyPanel.x + 16, 100, theme::kTextSecondary);
+    const float left = kCompanyPanel.x + 16;
+    const float right = kCompanyPanel.x + kCompanyPanel.width - 16;
+
+    drawText(fonts_.bodyBold, company_.name.c_str(), left, 80, theme::kTextPrimary);
+    const std::string meta = formatCount(company_.vertexCount(), "funcionário", "funcionários") + " · " +
+                             formatCount(company_.edgeCount(), "colaboração", "colaborações");
+    drawText(fonts_.small, meta.c_str(), left, 100, theme::kTextSecondary);
+
+    // Situação da busca, no canto direito
+    if (isRunning()) {
+        const std::string text = "Buscando… " + formatDuration(GetTime() - runStartTime_);
+        drawTextRight(fonts_.bodyBold, text, right, 80, theme::kAccent);
+        drawTextRight(fonts_.small, "A tela volta quando a busca terminar", right, 100, theme::kTextMuted);
+    } else if (hasRun_) {
+        std::string status;
+        Color color = theme::kTextPrimary;
+        if (!teamRevealed()) {
+            status = "Busca concluída";  // o resultado aparece quando a reprodução chegar nele
+        } else if (!result_.invalidReason.empty()) {
+            status = "Equipe inválida";
+            color = theme::kFail;
+        } else if (result_.found) {
+            status = "Equipe encontrada";
+            color = theme::kOk;
+        } else if (result_.cancelled) {
+            status = "Busca cancelada";
+            color = theme::kWarning;
+        } else if (result_.timedOut) {
+            status = "Tempo limite (" + formatDuration(kGuiTimeLimitSeconds) + ")";
+            color = theme::kWarning;
+        } else {
+            status = "Sem solução";
+        }
+        drawTextRight(fonts_.bodyBold, status, right, 80, color);
+        const std::string stats = solverName_ + " · " + formatCount(result_.steps, "candidato", "candidatos") + " · " +
+                                  formatDuration(result_.seconds);
+        drawTextRight(fonts_.small, stats, right, 100, theme::kTextSecondary);
+    }
 
     const Rectangle area = {kCompanyPanel.x, 120, kCompanyPanel.width, kCompanyPanel.y + kCompanyPanel.height - 120};
     companyScreen_ = toScreen(companyLayout_, area, 36);
@@ -235,10 +484,77 @@ void App::drawCompanyView(bool inputEnabled) {
     style.vertexRadius = companyRadius_;
     style.edgeThickness = company_.vertexCount() > 40 ? 1.0f : 2.0f;
     style.showNames = company_.vertexCount() <= 30;
-    drawGraph(company_, companyScreen_, style, fonts_, hoveredVertex_);
+    drawGraph(company_, companyScreen_, style, fonts_, hoveredVertex_, highlight);
+
+    // Rodapé do painel: o que aconteceu no passo atual e avisos
+    float bottom = kCompanyPanel.y + kCompanyPanel.height - 26;
+    if (!hasRun_) return;
+    if (result_.steps == 0) {
+        drawText(fonts_.small, "O solver não testou nenhum candidato.", left, bottom, theme::kTextMuted);
+        return;
+    }
+    DisplayedStep step;
+    if (displayedStep(step)) {
+        Color color = theme::kTextSecondary;
+        const std::string text = describeStep(step, color);
+        drawText(fonts_.bodyBold, text.c_str(), left, bottom - 2, color);
+        bottom -= 24;
+    }
+    if (ctx_->traceTruncated()) {
+        const std::string text = "A reprodução mostra os primeiros " + formatThousands(ctx_->trace().size()) +
+                                 " passos de " + formatThousands(result_.steps) + ".";
+        drawText(fonts_.small, text.c_str(), left, bottom, theme::kWarning);
+    }
 }
 
-void App::drawPatternPanel() {
+std::string App::describeStep(const DisplayedStep& step, Color& color) const {
+    const Graph& pattern = presets_[selectedPreset_].graph;
+    const int n = company_.vertexCount();
+    auto person = [&](int j) {
+        const int v = (j >= 0 && j < step.k) ? step.map[j] : -1;
+        return (v >= 0 && v < n) ? personName(company_, v) : "?";
+    };
+
+    if (showFinal_) {
+        color = theme::kOk;
+        return "Equipe encontrada além do trace: todas as colaborações exigidas existem";
+    }
+    switch (step.result) {
+        case StepResult::Match:
+            color = theme::kOk;
+            return "Equipe válida: papéis certos e todas as colaborações exigidas existem";
+        case StepResult::Testing:
+            color = theme::kTextSecondary;
+            return "Testando candidato…";
+        case StepResult::Fail:
+            break;
+    }
+
+    color = theme::kFail;
+    if (step.failU >= 0 && step.failV >= 0) {
+        return "Falha: falta a colaboração entre " + person(step.failU) + " (" + std::to_string(step.failU + 1) +
+               ") e " + person(step.failV) + " (" + std::to_string(step.failV + 1) + ")";
+    }
+    auto roleText = [&](int j) {
+        return "Falha: " + person(j) + " (" + std::to_string(j + 1) + ") não é " + roleDisplayName(pattern.role(j));
+    };
+    if (step.failU >= 0 && step.failU < pattern.vertexCount()) return roleText(step.failU);
+
+    // O solver não disse o motivo: mostra o primeiro problema visível no candidato
+    for (int j = 0; j < pattern.vertexCount() && j < step.k; ++j) {
+        if (step.map[j] >= 0 && step.map[j] < n && company_.role(step.map[j]) != pattern.role(j)) return roleText(j);
+    }
+    for (const auto& edge : pattern.edges()) {
+        const int a = edge.first < step.k ? step.map[edge.first] : -1;
+        const int b = edge.second < step.k ? step.map[edge.second] : -1;
+        if (a >= 0 && b >= 0 && a < n && b < n && !company_.hasEdge(a, b)) {
+            return "Falha: falta a colaboração entre " + person(edge.first) + " e " + person(edge.second);
+        }
+    }
+    return "Falha: candidato descartado";
+}
+
+void App::drawPatternPanel(const GraphHighlight* highlight) {
     const Preset& preset = presets_[selectedPreset_];
     const float x = kPatternPanel.x + 16;
     const float width = kPatternPanel.width - 32;
@@ -253,7 +569,7 @@ void App::drawPatternPanel() {
     style.vertexRadius = 18;
     style.edgeThickness = 2.5f;
     style.showRoleLabels = true;
-    drawGraph(preset.graph, toScreen(presetLayouts_[selectedPreset_], view, 28), style, fonts_);
+    drawGraph(preset.graph, toScreen(presetLayouts_[selectedPreset_], view, 28), style, fonts_, -1, highlight);
 
     float y = 304;
     for (const std::string& line : wrapText(fonts_.small, preset.graph.description, width)) {
@@ -261,53 +577,140 @@ void App::drawPatternPanel() {
         y += 18;
     }
 
-    // Legenda: cor de cada papel e quantos funcionários a empresa tem com esse papel
-    drawSectionLabel(fonts_, "PAPÉIS NA EMPRESA", x, 372);
+    // Legenda em duas colunas: cor de cada papel e quantos funcionários a empresa tem com ele
+    drawSectionLabel(fonts_, "PAPÉIS NA EMPRESA", x, 364);
     int counts[kRoleCount] = {};
     for (int v = 0; v < company_.vertexCount(); ++v) ++counts[static_cast<int>(company_.role(v))];
+    const float columnWidth = (width - 16) / 2;
     for (int r = 0; r < kRoleCount; ++r) {
         const Role role = static_cast<Role>(r);
-        const float rowY = 394 + r * 22.0f;
-        DrawCircle(static_cast<int>(x + 7), static_cast<int>(rowY + 8), 6, theme::roleColor(role));
-        drawText(fonts_.body, roleDisplayName(role), x + 22, rowY, theme::kTextPrimary);
-        const std::string count = std::to_string(counts[r]);
-        drawText(fonts_.body, count.c_str(), x + width - measureText(fonts_.body, count.c_str()), rowY,
-                 theme::kTextSecondary);
+        const float cx = x + (r % 2) * (columnWidth + 16);
+        const float cy = 386 + (r / 2) * 22.0f;
+        DrawCircleV({cx + 6, cy + 8}, 6, theme::roleColor(role));
+        drawText(fonts_.small, roleDisplayName(role), cx + 18, cy + 1, theme::kTextPrimary);
+        drawTextRight(fonts_.small, std::to_string(counts[r]), cx + columnWidth, cy + 1, theme::kTextSecondary);
     }
 
-    drawSectionLabel(fonts_, "EQUIPE FORMADA", x, 560);
-    drawText(fonts_.small, "Execute a busca para ver a equipe.", x, 582, theme::kTextMuted);
+    drawSectionLabel(fonts_, "EQUIPE FORMADA", x, 488);
+    drawTeam(x, 510, width);
 }
 
-void App::drawPlaybackBar() {
-    drawPanel(kPlaybackBar);
-
-    // Controles de reprodução: entram na Fase 5
-    GuiDisable();
-    const int icons[] = {ICON_PLAYER_PREVIOUS, ICON_ARROW_LEFT_FILL, ICON_PLAYER_PLAY, ICON_ARROW_RIGHT_FILL,
-                         ICON_PLAYER_NEXT};
-    float x = kPlaybackBar.x + 16;
-    const float y = kPlaybackBar.y + 16;
-    for (int icon : icons) {
-        GuiButton({x, y, 36, 36}, GuiIconText(icon, nullptr));
-        x += 42;
+void App::drawTeam(float x, float y, float width) {
+    if (isRunning()) {
+        drawText(fonts_.small, "Buscando…", x, y, theme::kTextMuted);
+        return;
+    }
+    if (!hasRun_) {
+        drawText(fonts_.small, "Execute a busca para ver a equipe.", x, y, theme::kTextMuted);
+        return;
+    }
+    if (!teamRevealed()) {
+        for (const std::string& line : wrapText(fonts_.small, "A equipe aparece quando a reprodução chegar nela (ou use \"Pular para a solução\").", width)) {
+            drawText(fonts_.small, line.c_str(), x, y, theme::kTextMuted);
+            y += 18;
+        }
+        return;
+    }
+    if (!result_.invalidReason.empty()) {
+        for (const std::string& line : wrapText(fonts_.small, "O solver devolveu uma equipe inválida: " + result_.invalidReason, width)) {
+            drawText(fonts_.small, line.c_str(), x, y, theme::kFail);
+            y += 18;
+        }
+        return;
+    }
+    if (!result_.found) {
+        const char* text = result_.cancelled ? "Busca cancelada antes de encontrar uma equipe."
+                           : result_.timedOut ? "Tempo limite atingido sem encontrar uma equipe."
+                                              : "Nenhuma equipe atende ao molde nesta empresa.";
+        for (const std::string& line : wrapText(fonts_.small, text, width)) {
+            drawText(fonts_.small, line.c_str(), x, y, theme::kTextSecondary);
+            y += 18;
+        }
+        return;
     }
 
-    x += 16;
+    const Graph& pattern = presets_[selectedPreset_].graph;
+    for (int j = 0; j < pattern.vertexCount() && j < static_cast<int>(result_.mapping.size()); ++j) {
+        const Role role = pattern.role(j);
+        const std::string label = std::to_string(j + 1) + "  " + roleDisplayName(role);
+        DrawCircleV({x + 5, y + 8}, 5, theme::roleColor(role));
+        drawText(fonts_.small, label.c_str(), x + 16, y, theme::kTextSecondary);
+        drawText(fonts_.bodyBold, personName(company_, result_.mapping[j]).c_str(), x + 120, y - 1, theme::kTextPrimary);
+        y += 20;
+    }
+}
+
+void App::drawPlaybackBar(bool inputEnabled) {
+    drawPanel(kPlaybackBar);
+    const bool enabled = inputEnabled && hasRun_ && ctx_->trace().size() > 0;
+    if (!enabled) GuiDisable();
+
+    const float y = kPlaybackBar.y + 16;
+    float x = kPlaybackBar.x + 16;
+
+    // Botões: início, passo anterior, reproduzir/pausar, próximo passo, fim
+    if (GuiButton({x, y, 36, 36}, GuiIconText(ICON_PLAYER_PREVIOUS, nullptr))) seek(0);
+    x += 42;
+    if (GuiButton({x, y, 36, 36}, GuiIconText(ICON_ARROW_LEFT_FILL, nullptr)) && current_ > 0) seek(current_ - 1);
+    x += 42;
+    if (GuiButton({x, y, 36, 36}, GuiIconText(playing_ ? ICON_PLAYER_PAUSE : ICON_PLAYER_PLAY, nullptr))) {
+        if (!playing_ && current_ >= lastStep()) seek(0);
+        playing_ = !playing_;
+    }
+    x += 42;
+    if (GuiButton({x, y, 36, 36}, GuiIconText(ICON_ARROW_RIGHT_FILL, nullptr))) seek(current_ + 1);
+    x += 42;
+    if (GuiButton({x, y, 36, 36}, GuiIconText(ICON_PLAYER_NEXT, nullptr))) seek(lastStep());
+    x += 52;
+
+    // Velocidade (escala logarítmica de 1 a 10.000 passos por segundo)
     drawText(fonts_.small, "Velocidade", x, y + 10, theme::kTextMuted);
-    x += measureText(fonts_.small, "Velocidade") + 12;
-    float speed = 0.3f;
-    GuiSliderBar({x, y + 10, 220, 16}, nullptr, nullptr, &speed, 0.0f, 1.0f);
-    x += 240;
+    x += measureText(fonts_.small, "Velocidade") + 10;
+    GuiSliderBar({x, y + 10, 110, 16}, nullptr, nullptr, &speedSlider_, 0.0f, 1.0f);
+    x += 118;
+    const std::string speed = formatThousands(static_cast<std::uint64_t>(std::lround(stepsPerSecond()))) + "/s";
+    drawText(fonts_.small, speed.c_str(), x, y + 10, enabled ? theme::kTextSecondary : theme::kTextMuted);
+    x += 70;
 
-    drawText(fonts_.body, "Passo — / —", x, y + 9, theme::kTextMuted);
+    // Linha do tempo: arrastar para ir a qualquer passo
+    const float timelineWidth = 330;
+    float position = static_cast<float>(current_);
+    const float maxPosition = static_cast<float>(std::max<std::size_t>(lastStep(), 1));
+    GuiSliderBar({x, y + 10, timelineWidth, 16}, nullptr, nullptr, &position, 0.0f, maxPosition);
+    if (enabled && std::fabs(position - static_cast<float>(current_)) >= 1.0f) {
+        seek(static_cast<std::size_t>(position));
+    }
+    x += timelineWidth + 14;
 
-    GuiButton({kPlaybackBar.x + kPlaybackBar.width - 196, y, 180, 36},
-              GuiIconText(ICON_PLAYER_NEXT, "Pular para a solução"));
+    const std::string stepText = hasRun_ && ctx_->trace().size() > 0
+                                     ? "Passo " + formatThousands(current_ + 1) + " / " + formatThousands(ctx_->trace().size())
+                                     : "Passo — / —";
+    drawText(fonts_.small, stepText.c_str(), x, y + 10, enabled ? theme::kTextPrimary : theme::kTextMuted);
+
+    // Pular para a solução: vai até a equipe no trace; se ela ficou além do limite do trace, mostra
+    // direto a equipe final
+    const bool canJump = enabled && result_.found;
+    if (!canJump) GuiDisable();
+    if (GuiButton({kPlaybackBar.x + kPlaybackBar.width - 196, y, 180, 36},
+                  GuiIconText(ICON_PLAYER_NEXT, "Pular para a solução"))) {
+        if (matchStep_ != kNoStep) {
+            seek(matchStep_);
+        } else {
+            seek(lastStep());
+            showFinal_ = true;
+        }
+    }
     GuiEnable();
 }
 
-void App::drawControls() {
+void App::drawControls(bool inputEnabled) {
+    // Executar / Cancelar
+    if (isRunning()) {
+        if (GuiButton(kRunButton, GuiIconText(ICON_PLAYER_STOP, "Cancelar"))) cancel_.store(true);
+    } else if (GuiButton(kRunButton, GuiIconText(ICON_PLAYER_PLAY, "Executar busca"))) {
+        startRun();
+    }
+
     // Lista de solvers no formato da raygui ("A;B;C")
     std::string solverNames;
     for (const SolverInfo& solver : allSolvers()) {
@@ -320,23 +723,31 @@ void App::drawControls() {
         companyNames += option.label;
     }
 
+    if (!inputEnabled) GuiDisable();
     // A empresa é desenhada antes do solver: a lista do solver abre para baixo, por cima dela
-    const int previousCompany = selectedCompany_;
-    if (GuiDropdownBox(kCompanyDropdown, companyNames.c_str(), &selectedCompany_, companyDropdownOpen_)) {
+    int company = selectedCompany_;
+    if (GuiDropdownBox(kCompanyDropdown, companyNames.c_str(), &company, companyDropdownOpen_)) {
         companyDropdownOpen_ = !companyDropdownOpen_;
     }
-    if (GuiDropdownBox(kSolverDropdown, solverNames.c_str(), &selectedSolver_, solverDropdownOpen_)) {
+    int solver = selectedSolver_;
+    if (GuiDropdownBox(kSolverDropdown, solverNames.c_str(), &solver, solverDropdownOpen_)) {
         solverDropdownOpen_ = !solverDropdownOpen_;
     }
-    if (selectedCompany_ != previousCompany) rebuildCompany();
+    GuiEnable();
+
+    if (company != selectedCompany_) selectCompany(company);
+    if (solver != selectedSolver_) {
+        selectedSolver_ = solver;
+        resetRun();
+    }
 }
 
 void App::drawTooltip() {
     if (hoveredVertex_ < 0) return;
     const Vertex& vertex = company_.vertex(hoveredVertex_);
-    const std::string title = vertex.name.empty() ? "Funcionário #" + std::to_string(hoveredVertex_) : vertex.name;
+    const std::string title = personName(company_, hoveredVertex_);
     const std::string detail = std::string(roleDisplayName(vertex.role)) + " · " +
-                               plural(company_.degree(hoveredVertex_), "colaboração", "colaborações");
+                               formatCount(company_.degree(hoveredVertex_), "colaboração", "colaborações");
 
     const float width = std::max(measureText(fonts_.bodyBold, title.c_str()), measureText(fonts_.small, detail.c_str())) + 24;
     const Vector2 mouse = GetMousePosition();
