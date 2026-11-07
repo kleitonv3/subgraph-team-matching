@@ -185,7 +185,13 @@ sorteados e `seed`.
           Abas:  [ Visualização ]  [ Benchmark ]
 ```
 
-- A cor de cada vértice do molde se repete no funcionário mapeado, então dá para ver a correspondência `i ↔ map[i]`.
+- A cor de cada vértice indica o **papel** (mesma cor na empresa, no molde e na legenda). Na Fase 5, a
+  correspondência `j ↔ map[j]` é mostrada destacando os funcionários do candidato atual com o número da
+  posição do molde.
+- **Seletor de empresa:** a empresa de demonstração (`company.txt`, posições do arquivo) ou empresas geradas
+  com 25, 50 e 100 pessoas (modo plantada com o molde escolhido, `seed` 1, grau médio 4 para o desenho
+  ficar legível). As geradas usam layout automático de forças (Fruchterman–Reingold), determinístico.
+- Passar o mouse sobre um funcionário mostra nome, papel e número de colaborações.
 - A velocidade vai de 1 a 10.000 passos/s, em escala logarítmica.
 - A aba **Benchmark** lê `results/bench.csv` e plota as duas séries (tempo × n e tempo × k) em escala
   log, marcando a partir de que tamanho a busca passa do tempo limite.
@@ -209,6 +215,9 @@ sorteados e `seed`.
 - **Windows:** w64devkit (versão de referência: 2.10.1). O MinGW.org GCC 6.3 foi testado na Fase 1 e **não**
   compila a raylib: faltam headers do Windows (`minwindef.h`, `dinput.h`).
 - O módulo de áudio da raylib (`raudio`) não é compilado, porque o projeto não usa som.
+- No Windows, o `teams_gui.exe` leva ícone e informações de versão (`src/gui/teams_gui.rc`). Na Fase 4, o
+  Kaspersky marcou como `VHO:Trojan-Dropper` (detecção heurística, falso positivo) uma versão que capturava
+  a tela para salvar imagens. A captura foi removida; as imagens do README são tiradas à mão.
 - **Linux:** `build-essential` + `libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev`.
 
 ---
@@ -259,7 +268,7 @@ O Kleiton revisa o diff e faz o merge, e só então começa a fase seguinte. Os 
 - **Checkpoint:** `make && make run` abre a janela.
 - **Para revisar:** Makefile (alvos, flags, detecção de SO) e o README com as instruções de build.
 
-### Fase 2 — Núcleo de dados e contrato
+### ✅ Fase 2 — Núcleo de dados e contrato
 - `Graph`, leitor dos arquivos `.txt` com mensagens de erro claras (linha e motivo).
 - `data/company.txt` e os presets.
 - `solver.hpp`, `SearchContext` (trace, contador, timeout), registro de solvers e o **stub** de

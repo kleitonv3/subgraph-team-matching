@@ -56,6 +56,12 @@ portátil: não precisa de instalador nem de permissão de administrador.
 Também dá para usar o terminal de sempre: basta colocar `C:\w64devkit\bin` no `PATH`, **antes** de
 qualquer outro MinGW.
 
+> **Se o antivírus reclamar:** alguns antivírus (o Kaspersky, por exemplo) às vezes marcam executáveis
+> recém-compilados com MinGW como suspeitos. São detecções heurísticas (como `VHO:...`), que acontecem com
+> programas sem assinatura digital e que nenhum outro computador executou antes. O executável é gerado na
+> sua máquina a partir do código deste repositório. Se acontecer, adicione a pasta `bin/` do projeto às
+> exceções do antivírus.
+
 ### Linux (Debian/Ubuntu)
 
 ```sh
