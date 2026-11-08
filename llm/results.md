@@ -24,6 +24,7 @@ diferente de errar com 40%.
 | # | Agente / modelo | Data | Variação | C1 | C2 | C3 | C4 | C5 | C6 | C7 | Acertos | Observações |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | ChatGPT (modelo não informado) | 08/11/2026 | sem ferramentas, todos os casos | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | 7/7 | 100% de confiança em todos; no caso 3, conclusão certa com justificativa parcialmente falsa |
+| 2 | Gemini 3.5 Flash Lite (o modelo se identificou só como "Gemini 3") | 08/11/2026 | sem ferramentas, todos os casos | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | 7/7 | 100% de confiança em todos; nos casos sem solução, só afirma a conclusão, sem demonstrar |
 
 Referência (força bruta do projeto, `teams_bench --run ... --all`): acerta os 7 casos e encontra todas as
 equipes de cada um em menos de 1 segundo. O caso 7, o maior, testa todos os 30·29·28·27·26 = 17.100.720
@@ -168,6 +169,75 @@ O ciclo completo P15 → P09 → P29 → P04 → P15 está presente. Além disso
 Todos os funcionários ocupam posições distintas e possuem os papéis exigidos.
 
 Confiança: 100%.
+```
+
+</details>
+
+### Teste 2 — Gemini 3.5 Flash Lite, 08/11/2026, sem ferramentas
+
+O modelo se identificou só como "Gemini 3". Acertou os 7 casos, todos com 100% de confiança.
+
+- Casos 1 e 4: as únicas equipes que existem.
+- Caso 2: respondeu a equipe do grupo de Lucas (Lucas, Ana, Carla, Diego); o ChatGPT tinha respondido a do
+  grupo de Fábio. As duas estão certas.
+- Casos 3 e 6: SEM SOLUÇÃO, que está certo, mas as justificativas só **repetem a conclusão** ("não existe
+  nenhum grupo... onde todos tenham colaborado mutuamente"; "nenhum dos líderes... possui colaboração com
+  nenhum designer"). Nenhum candidato ou colaboração faltante é citado, então não dá para conferir o
+  raciocínio pelo texto.
+- Caso 5: equipe do grupo de Lucas, certa.
+- Caso 7: P15, P26, P09, P29, P04, a mesma resposta do ChatGPT (a equipe que o gerador embutiu na empresa).
+
+<details><summary>Resposta completa</summary>
+
+```text
+Caso 1: EQUIPE
+1 (Arquiteto) = Heitor
+2 (Dev) = Elisa
+3 (DevOps) = Nuno
+Justificativa: Heitor é Arquiteto e colabora com Elisa (Dev) e Nuno (DevOps); Elisa e Nuno também colaboram entre si (Elisa–Nuno), preenchendo todas as arestas do triângulo exigido.
+Confiança: 100%
+
+Caso 2: EQUIPE
+1 (Líder) = Lucas
+2 (Dev) = Ana
+3 (Dev) = Carla
+4 (Designer) = Diego
+Justificativa: Lucas é Líder e colabora diretamente com Ana (Dev), Carla (Dev) e Diego (Designer), satisfazendo todas as colaborações exigidas pelo molde.
+Confiança: 100%
+
+Caso 3: SEM SOLUÇÃO
+Justificativa: Não existe nenhum grupo na Empresa A formado por um líder, dois desenvolvedores e um designer onde todos os membros tenham colaborado mutuamente entre si (clique completo de 4 vértices).
+Confiança: 100%
+
+Caso 4: EQUIPE
+1 (Líder) = Fábio
+2 (Dev) = Gabi
+3 (Designer) = Marina
+4 (QA) = João
+Justificativa: Fábio (Líder), Gabi (Dev), Marina (Designer) e João (QA) formam um grupo totalmente interconectado pelas colaborações exigidas (Fábio–Gabi, Fábio–Marina, Fábio–João, Gabi–Marina, Gabi–João e João–Marina).
+Confiança: 100%
+
+Caso 5: EQUIPE
+1 (Líder) = Lucas
+2 (Designer) = Diego
+3 (Dev) = Ana
+4 (Dev) = Carla
+5 (QA) = Bruno
+Justificativa: Lucas (Líder) colabora com Diego (Designer), Ana (Dev) e Bruno (QA); Ana colabora com Carla (Dev); e Carla colabora com Bruno (QA), fechando o ciclo de colaborações exigidas.
+Confiança: 100%
+
+Caso 6: SEM SOLUÇÃO
+Justificativa: Nenhum dos líderes da Empresa B possui colaboração registrada com nenhum designer da empresa, tornando impossível atender à exigência de colaboração entre o líder e o designer.
+Confiança: 100%
+
+Caso 7: EQUIPE
+1 (Líder) = P15
+2 (Designer) = P26
+3 (Dev) = P09
+4 (Dev) = P29
+5 (QA) = P04
+Justificativa: P15 (Líder) colabora com P26 (Designer), P09 (Dev) e P04 (QA); P09 colabora com P29 (Dev); e P29 colabora com P04 (QA), completando o ciclo de colaborações exigidas.
+Confiança: 100%
 ```
 
 </details>
