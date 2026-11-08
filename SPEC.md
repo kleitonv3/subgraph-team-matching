@@ -282,7 +282,7 @@ O Kleiton revisa o diff e faz o merge, e só então começa a fase seguinte. Os 
   sem travar.
 - **Para revisar:** o formato dos arquivos, os presets fazem sentido? O contrato da seção 4 está confortável para implementar?
 
-### Fase 3 — Algoritmo de força bruta (Kleiton)
+### ✅ Fase 3 — Algoritmo de força bruta (Kleiton)
 - Implementar `bruteForce` seguindo o contrato. Pode rodar em paralelo com as Fases 4 e 5.
 - **Checkpoint:** `teams_bench --run <preset>` encontra uma equipe válida para cada preset na
   `company.txt`, e `--run <preset> --n 30 --mode nosolution` responde "sem solução".
@@ -314,7 +314,7 @@ O Kleiton revisa o diff e faz o merge, e só então começa a fase seguinte. Os 
   até a solução.
 - **Para revisar:** a animação explica bem o que a força bruta está fazendo?
 
-### Fase 6 — Benchmark
+### ✅ Fase 6 — Benchmark
 - CLI `teams_bench` com duas séries, ambas nos modos plantada e sem solução:
   - **n crescente, k fixo:** para cada preset, aumenta o tamanho da empresa até estourar o tempo
     limite. Responde "até que tamanho de empresa é viável".
@@ -351,6 +351,34 @@ O Kleiton revisa o diff e faz o merge, e só então começa a fase seguinte. Os 
 - README completo (como compilar, rodar, formato dos arquivos, prints da interface).
 - Build limpo testado do zero, no Windows e se possível no Linux.
 - **Checkpoint:** um clone novo do repositório compila e roda seguindo só o README.
+
+### Fase 8 — Experimento com LLM (parte ii do trabalho)
+- Enunciado: verificar como uma LLM generalista se sai ao resolver os mesmos casos fictícios. Ela consegue
+  solucionar? Propõe soluções incorretas? Quão eficiente é usá-la para esse problema?
+- Não implementamos um modelo: a pasta `llm/` traz uma mensagem pronta para colar em agentes/modelos, o
+  gabarito e um modelo para registrar os resultados.
+  - `llm/prompt.md`: a mensagem, com as regras do problema, o formato de resposta e 7 casos;
+  - `llm/answers.md`: todas as equipes válidas de cada caso, conferidas pelo solver de força bruta
+    (`--all`) e por um script independente;
+  - `llm/results.md`: tabela para registrar cada teste e as perguntas do enunciado para a análise;
+  - `llm/cases/`: os arquivos de dados criados para o experimento (um molde e duas empresas geradas).
+- Os 7 casos:
+
+  | Caso | Molde | Empresa | Resposta |
+  |---|---|---|---|
+  | 1 | Trio de Arquitetura (k = 3) | exemplo (14 pessoas) | 1 equipe |
+  | 2 | Squad Ágil (k = 4) | exemplo | 2 equipes (4 formas) |
+  | 3 | Time Completo (k = 4, clique) | exemplo | **sem solução** (quase-encaixe: falta 1 colaboração) |
+  | 4 | Time Estrela (k = 4, clique) | exemplo | 1 equipe |
+  | 5 | Squad de Produto (k = 5) | exemplo | 2 equipes |
+  | 6 | Squad Ágil (k = 4) | gerada, 20 pessoas | **sem solução** (nenhum Líder colabora com Designer) |
+  | 7 | Squad de Produto (k = 5) | gerada, 30 pessoas | 7 formas |
+
+- Os casos sem solução testam se a LLM inventa uma equipe; o caso 7 testa um tamanho em que conferir de
+  cabeça fica difícil.
+- Na mensagem, as colaborações aparecem em ordem alfabética: a ordem dos arquivos agrupa as pessoas por
+  equipe e, nas empresas geradas, deixa as colaborações da equipe embutida no fim, o que daria pistas.
+- **Checkpoint:** a mensagem pode ser colada como está, e cada resposta pode ser corrigida só com o gabarito.
 
 ---
 
