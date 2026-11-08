@@ -25,6 +25,7 @@ diferente de errar com 40%.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | ChatGPT (modelo não informado) | 08/11/2026 | sem ferramentas, todos os casos | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | 7/7 | 100% de confiança em todos; no caso 3, conclusão certa com justificativa parcialmente falsa |
 | 2 | Gemini 3.5 Flash Lite (o modelo se identificou só como "Gemini 3") | 08/11/2026 | sem ferramentas, todos os casos | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | 7/7 | 100% de confiança em todos; nos casos sem solução, só afirma a conclusão, sem demonstrar |
+| 3 | Claude Sonnet 5.5 | 08/11/2026 | sem ferramentas, todos os casos | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | 7/7 | 97% a 99% de confiança (menor nos casos sem solução); justificativas corretas e verificáveis em todos os casos |
 
 Referência (força bruta do projeto, `teams_bench --run ... --all`): acerta os 7 casos e encontra todas as
 equipes de cada um em menos de 1 segundo. O caso 7, o maior, testa todos os 30·29·28·27·26 = 17.100.720
@@ -238,6 +239,83 @@ Caso 7: EQUIPE
 5 (QA) = P04
 Justificativa: P15 (Líder) colabora com P26 (Designer), P09 (Dev) e P04 (QA); P09 colabora com P29 (Dev); e P29 colabora com P04 (QA), completando o ciclo de colaborações exigidas.
 Confiança: 100%
+```
+
+</details>
+
+### Teste 3 — Claude Sonnet 5.5, 08/11/2026, sem ferramentas
+
+Acertou os 7 casos, com 99% de confiança nos casos com equipe, 98% no caso 7 e 97% nos dois casos sem
+solução. Todas as afirmações das justificativas foram conferidas com os dados e estão corretas.
+
+- Casos 1, 2, 4 e 5: equipes certas. No caso 5, respondeu a equipe do grupo de Fábio (os testes 1 e 2
+  responderam a do grupo de Lucas); as duas estão certas.
+- Caso 3: SEM SOLUÇÃO, com a justificativa completa e correta: os únicos devs vizinhos de Fábio são Elisa e
+  Gabi, o único designer vizinho é Marina, e Elisa–Marina não existe; Diego, o único designer vizinho de
+  Lucas, só colabora com Lucas, então faltam Diego–Ana e Diego–Carla.
+- Caso 6: SEM SOLUÇÃO, partindo dos 3 designers (o lado com menos pessoas para conferir) e listando os
+  vizinhos de cada um sem erro: nenhum é líder.
+- Caso 7: P15, P26, P09, P29, P04, a mesma resposta dos testes 1 e 2 (a equipe que o gerador embutiu na
+  empresa), conferindo também papéis e repetição.
+
+<details><summary>Resposta completa</summary>
+
+```text
+Caso 1: EQUIPE
+1 (Arquiteto) = Heitor
+2 (Dev) = Elisa
+3 (DevOps) = Nuno
+Justificativa: 1–2 existe porque Heitor–Elisa está na lista. 1–3 existe porque Heitor–Nuno está na lista. 2–3 existe porque Elisa–Nuno está na lista.
+Confiança: 99%
+
+Caso 2: EQUIPE
+1 (Líder) = Fábio
+2 (Dev) = Elisa
+3 (Dev) = Gabi
+4 (Designer) = Marina
+Justificativa: 1–2 existe porque Fábio–Elisa está na lista. 1–3 existe porque Fábio–Gabi está na lista. 1–4 existe porque Fábio–Marina está na lista.
+Confiança: 99%
+
+Caso 3: SEM SOLUÇÃO
+Justificativa: O líder precisa ter colaboração com dois devs e com o designer, e os dois devs e o designer precisam colaborar entre si. Há dois líderes na empresa.
+- Fábio tem como devs vizinhos apenas Elisa e Gabi, e como designer vizinho apenas Marina. Elisa–Marina não existe, então falha.
+- Lucas tem como designer vizinho apenas Diego, e Diego só colaborou com Lucas. Então Diego–Ana e Diego–Carla não existem, e falha.
+Nenhuma escolha funciona.
+Confiança: 97%
+
+Caso 4: EQUIPE
+1 (Líder) = Fábio
+2 (Dev) = Gabi
+3 (Designer) = Marina
+4 (QA) = João
+Justificativa: 1–2 existe porque Fábio–Gabi está na lista. 1–3 existe porque Fábio–Marina está na lista. 1–4 existe porque Fábio–João está na lista. 2–3 existe porque Gabi–Marina está na lista. 2–4 existe porque Gabi–João está na lista. 3–4 existe porque João–Marina está na lista.
+Confiança: 99%
+
+Caso 5: EQUIPE
+1 (Líder) = Fábio
+2 (Designer) = Marina
+3 (Dev) = Elisa
+4 (Dev) = Gabi
+5 (QA) = João
+Justificativa: 1–2 existe porque Fábio–Marina está na lista. 1–3 existe porque Fábio–Elisa está na lista. 3–4 existe porque Elisa–Gabi está na lista. 4–5 existe porque Gabi–João está na lista. 5–1 existe porque Fábio–João está na lista.
+Confiança: 99%
+
+Caso 6: SEM SOLUÇÃO
+Justificativa: O líder precisa ter colaboração com um designer. Os designers da empresa B são P06, P12 e P19, e os líderes são P00, P02, P03 e P17.
+- P06 colaborou apenas com P08 e P18.
+- P12 colaborou apenas com P04, P10, P11, P13 e P15.
+- P19 colaborou apenas com P01 e P14.
+Nenhum desses vizinhos é líder, então nenhum líder tem colaboração com um designer.
+Confiança: 97%
+
+Caso 7: EQUIPE
+1 (Líder) = P15
+2 (Designer) = P26
+3 (Dev) = P09
+4 (Dev) = P29
+5 (QA) = P04
+Justificativa: 1–2 existe porque P15–P26 está na lista. 1–3 existe porque P15–P09 está na lista. 3–4 existe porque P09–P29 está na lista. 4–5 existe porque P04–P29 está na lista. 5–1 existe porque P04–P15 está na lista. Os papéis conferem (P15 Líder, P26 Designer, P09 e P29 Dev, P04 QA) e ninguém se repete.
+Confiança: 98%
 ```
 
 </details>
