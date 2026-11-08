@@ -347,12 +347,17 @@ O Kleiton revisa o diff e faz o merge, e só então começa a fase seguinte. Os 
 - **Checkpoint:** `make bench` gera o CSV e a aba plota os dados.
 - **Para revisar:** o gráfico responde claramente "até que tamanho é viável"?
 
-### Fase 7 — Polimento e entrega
-- README completo (como compilar, rodar, formato dos arquivos, prints da interface).
-- Build limpo testado do zero, no Windows e se possível no Linux.
+### ✅ Fase 7 — Polimento e entrega
+- README completo: o problema, como compilar (Linux primeiro, que é o mais provável para o professor), a
+  interface passo a passo, a linha de comando com entradas e saídas esperadas, o benchmark, os resultados
+  (tempo limite de 60 s), o formato dos arquivos, o experimento com LLM e a estrutura do projeto.
+- Imagens da interface em `docs/images/`, geradas com o solver real. Elas são capturadas num build Linux
+  (WSL), porque o código de captura de tela dispara o falso positivo do antivírus no Windows (seção 7).
+- Build limpo testado do zero, a partir de um clone novo do GitHub, no Windows (w64devkit) e no Linux
+  (WSL Ubuntu 22.04).
 - **Checkpoint:** um clone novo do repositório compila e roda seguindo só o README.
 
-### Fase 8 — Experimento com LLM (parte ii do trabalho)
+### ✅ Fase 8 — Experimento com LLM (parte ii do trabalho)
 - Enunciado: verificar como uma LLM generalista se sai ao resolver os mesmos casos fictícios. Ela consegue
   solucionar? Propõe soluções incorretas? Quão eficiente é usá-la para esse problema?
 - Não implementamos um modelo: a pasta `llm/` traz uma mensagem pronta para colar em agentes/modelos, o
